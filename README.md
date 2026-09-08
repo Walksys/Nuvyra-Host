@@ -1,21 +1,35 @@
 <div align="center">
 
-# ⚡ vPanel Pro v2.0
-### Next-Gen QEMU/KVM Virtual Machine Management Web Panel
+# ⚡ vPanel Pro v3.0
+### Enterprise-Grade QEMU/KVM Virtualization & Server Management Platform
 
 [![Node.js](https://img.shields.io/badge/Node.js-v18+-339933?style=for-the-badge&logo=nodedotjs&logoColor=white)](https://nodejs.org)
 [![Express](https://img.shields.io/badge/Express.js-000000?style=for-the-badge&logo=express&logoColor=white)](https://expressjs.com)
 [![QEMU](https://img.shields.io/badge/QEMU-Virtualization-FF6600?style=for-the-badge&logo=qemu&logoColor=white)](https://www.qemu.org/)
-[![SQLite](https://img.shields.io/badge/better--sqlite3-003B57?style=for-the-badge&logo=sqlite&logoColor=white)](https://github.com/WiseLibs/better-sqlite3)
+[![MongoDB](https://img.shields.io/badge/MongoDB-47A248?style=for-the-badge&logo=mongodb&logoColor=white)](https://www.mongodb.com/)
 [![License](https://img.shields.io/badge/License-MIT-6366F1?style=for-the-badge)](LICENSE)
 
-*A high-performance, dark glassmorphic web control panel designed for hosting, managing, and automating QEMU virtual servers.*
+*A complete, high-performance virtualization platform with strict 2-Panel Separation (👑 Admin Control Plane vs 👤 Tenant User Panel), dynamic module architecture, event bus plugins, AI diagnostics, and billing.*
 
 ---
 
 </div>
 
-## 🌟 Highlights & Key Features
+## 🌟 What's New in vPanel Pro v3.0
+
+- 👑 **Clean 2-Panel Architecture**: Strict UI segregation between the Administrative Control Plane (`/admin/*`) and the Tenant Server Management Panel (`/dashboard`).
+- 🗄️ **MongoDB Management Studio**: Integrated Mongo-Express style manager for databases, collections, documents, indexes, and raw MongoDB query console.
+- 💾 **Storage Pools & ISO Library**: Manage Local Directory, LVM Volume Groups, and NFS storage pools, plus 1-click cloud image downloads (Ubuntu 24.04, Debian 12, Alpine Linux, Windows Server).
+- 🌐 **Virtual Network & Firewall**: Host bridge interface discovery (`br0`, `virbr0`), IP CIDR subnet pools with lease tracking, NAT port forwarding, and virtual firewall rules (`ALLOW`/`DROP`).
+- ⚡ **API Keys & Webhooks**: Scoped REST API keys (`vp_live_...`) and outgoing event webhooks with HMAC-SHA256 signatures.
+- 🧩 **Event-Driven Plugins**: Native event dispatchers for **Discord Rich Embeds**, **Telegram Bot Alerts**, and custom HTTP POST webhooks.
+- 🎨 **Multi-Theme Engine**: 5 selectable presets: Slate Glass (default), Onyx Pure Black, Cyberpunk Neon, Arctic Nord, and Dracula Gothic.
+- 🔍 **Global Command Palette (`Ctrl + K`)**: Universal spotlight search for instant navigation, server/user lookup, and power actions.
+- 👤 **Tenant User Impersonation**: 1-click "Login as User" with a persistent floating return-to-admin bar and full audit logging.
+- 🤖 **AI Virtualization Diagnostics**: Intelligent offline boot log analyzer detecting Kernel Panics, KVM permissions, OOM kills, and disk corruption with copyable remediation commands.
+- 💳 **Billing & Resource Plans**: Compute packages (Starter, Pro, Ultra, Enterprise), invoice ledger, discount coupons, and payment gateway setup.
+- 🔄 **Pterodactyl-Style Updates Center**: Automated GitHub release checks, pre-update snapshots, live SSE progress streaming, and 1-click rollbacks.
+- 🌍 **Internationalization (i18n)**: Localization for English, Hindi (हिन्दी), Spanish (Español), German (Deutsch), and Arabic (العربية with RTL).
 
 ### 🎨 1. Cosmic Glassmorphism UI & Studio
 - **Deep Slate Dark Design**: Modern translucent glass cards with glowing accent halo borders (`--panel-blur`, `--panel-transparency`).
@@ -62,7 +76,7 @@
                                │ HTTP / WebSocket (Port 3001)
 ┌──────────────────────────────▼──────────────────────────────┐
 │                    Node.js + Express Core                   │
-│  (Auth Middleware • SQLite/better-sqlite3 • VM Orchestrator)│
+│  (Auth Middleware • MongoDB Database • VM Orchestrator)     │
 └──────────────┬──────────────────────────────┬───────────────┘
                │                              │
 ┌──────────────▼──────────────┐┌──────────────▼───────────────┐

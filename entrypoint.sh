@@ -20,24 +20,27 @@ mkdir -p /app/data /app/vms /app/uploads/logo /app/uploads/favicon /app/uploads/
 # Run build / directory initialization
 node scripts/build.js
 
-# If database is fresh and has no users, create default admin
 if [ -f "/app/scripts/createuser.js" ]; then
   node -e "
-    const { db } = require('./src/lib/db');
-    const row = db.prepare('SELECT COUNT(*) as count FROM users').get();
-    if (row.count === 0) {
-      console.log('[vpanel] Creating default administrator user: admin / admin123');
-      const auth = require('./src/services/authService');
-      auth.createUser({
-        username: process.env.ADMIN_USER || 'admin',
-        email: process.env.ADMIN_EMAIL || 'admin@vpanel.local',
-        password: process.env.ADMIN_PASSWORD || 'admin123',
-        name: 'Administrator',
-        role: 'admin',
-        root_admin: 1,
-        verified: 1
-      });
-    }
+    const { initDb, closeDb, collections } = require('./src/lib/db');
+    const auth = require('./src/services/authService');
+    (async () => {
+      await initDb();
+      const count = await collections.users.countDocuments();
+      if (count === 0) {
+        console.log('[vpanel] Creating default administrator user: admin / admin123');
+        const u = await auth.createUser({
+          username: process.env.ADMIN_USER || 'admin',
+          email: process.env.ADMIN_EMAIL || 'admin@vpanel.local',
+          password: process.env.ADMIN_PASSWORD || 'admin123',
+          name: 'Administrator',
+          role: 'admin',
+          verified: 1
+        });
+        await collections.users.updateOne({ id: u.id }, { $set: { root_admin: 1 } });
+      }
+      await closeDb();
+    })().catch(console.error);
   " || true
 fi
 

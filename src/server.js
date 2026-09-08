@@ -4,13 +4,20 @@ const logger = require('./lib/logger');
 
 process.title = 'vpanel';
 
-const { io } = bootstrap();
+(async () => {
+  try {
+    const { io } = await bootstrap();
 
-process.on('SIGINT', () => {
-  logger.info('[panel] shutting down');
-  io.close();
-  process.exit(0);
-});
+    process.on('SIGINT', () => {
+      logger.info('[panel] shutting down');
+      if (io) io.close();
+      process.exit(0);
+    });
+  } catch (err) {
+    logger.error('[panel] bootstrap error: ' + (err.stack || err));
+    process.exit(1);
+  }
+})();
 
 process.on('uncaughtException', (e) => {
   logger.error('[panel] uncaught exception: ' + e.stack);

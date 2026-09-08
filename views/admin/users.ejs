@@ -82,6 +82,14 @@
                 <a class="btn btn-sm btn-primary" href="/admin/servers/create?owner_id=<%= u.id %>" title="Deploy new VM for <%= u.username %>">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13" style="vertical-align:-1px;margin-right:2px"><path d="M12 5v14M5 12h14"/></svg>+ VM
                 </a>
+                <% if (u.id !== user.id && !u.suspended) { %>
+                  <form method="POST" action="/admin/users/<%= u.id %>/impersonate" style="display:inline;margin:0">
+                    <button class="btn btn-sm" type="submit" title="Login as <%= u.username %>" style="background:rgba(245,158,11,0.12);border:1px solid rgba(245,158,11,0.35);color:#fbbf24;display:flex;align-items:center;gap:4px">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12" height="12"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
+                      Login As
+                    </button>
+                  </form>
+                <% } %>
                 <a class="btn btn-sm" href="/admin/users/<%= u.id %>">Manage</a>
                 <% if (u.suspended) { %>
                   <button class="btn btn-sm btn-green" onclick="suspend(<%= u.id %>, false)">Unsuspend</button>

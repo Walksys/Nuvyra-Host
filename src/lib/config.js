@@ -10,6 +10,7 @@ const config = {
   panelUrl: process.env.PANEL_URL || `http://localhost:${parseInt(process.env.PANEL_PORT || '3001', 10)}`,
   jwtSecret: process.env.JWT_SECRET || 'vpanel-insecure-secret-change-me',
   jwtExpires: process.env.JWT_EXPIRES || '7d',
+  mongoUri: process.env.MONGO_URI || 'mongodb://admin:password123@127.0.0.1:27017/vpanel?authSource=admin',
   dbPath: path.resolve(root, process.env.DB_PATH || 'data/vpanel.db'),
   vmDir: path.resolve(root, process.env.VM_DIR || 'vms'),
   autoPortMin: parseInt(process.env.AUTO_PORT_MIN || '25501', 10),

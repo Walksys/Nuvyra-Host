@@ -1,5 +1,5 @@
 const cron = require('node-cron');
-const { db } = require('../lib/db');
+const { collections, getNextId } = require('../lib/db');
 const logger = require('../lib/logger');
 const vmService = require('./vmService');
 const backupService = require('./backupService');
@@ -9,7 +9,6 @@ const jobs = new Map();
 
 function toCron(text) {
   let t = String(text).trim();
-  // accept simple presets like "*/5 * * * *"
   if (/^(\S+\s+){4}\S+$/.test(t)) return t;
   const presets = {
     hourly: '0 * * * *',
@@ -21,29 +20,29 @@ function toCron(text) {
   return null;
 }
 
-function runJob(schedule, vm) {
+function runJob(schedule) {
   return async () => {
-    const sched = db.prepare('SELECT * FROM schedules WHERE id = ?').get(schedule.id);
+    const sched = await collections.schedules.findOne({ id: Number(schedule.id) });
     if (!sched || !sched.enabled) return;
-    const curVm = vmService.getVm(sched.vm_id);
+    const curVm = await vmService.getVm(sched.vm_id);
     if (!curVm) return;
     logger.info(`[cron] running "${sched.name}" (${sched.action}) for ${curVm.name}`);
     try {
       if (sched.action === 'start') await vmService.start(curVm);
-      else if (sched.action === 'stop') vmService.stop(curVm);
+      else if (sched.action === 'stop') await vmService.stop(curVm);
       else if (sched.action === 'restart') await vmService.restart(curVm);
-      else if (sched.action === 'backup') backupService.createBackup(curVm, { name: `sched-${Date.now()}` });
-      db.prepare('UPDATE schedules SET last_run_at = ? WHERE id = ?').run(new Date().toISOString(), sched.id);
-      logActivity({ vm_id: curVm.id, event: 'schedule:run', details: { name: sched.name, action: sched.action } });
+      else if (sched.action === 'backup') await backupService.createBackup(curVm, { name: `sched-${Date.now()}` });
+      await collections.schedules.updateOne({ id: Number(sched.id) }, { $set: { last_run_at: new Date().toISOString() } });
+      await logActivity({ vm_id: curVm.id, event: 'schedule:run', details: { name: sched.name, action: sched.action } });
     } catch (e) {
       logger.error('[cron] job error: ' + e.message);
     }
   };
 }
 
-function register(schedule) {
+async function register(schedule) {
   unregister(schedule.id);
-  const vm = vmService.getVm(schedule.vm_id);
+  const vm = await vmService.getVm(schedule.vm_id);
   if (!vm || !schedule.enabled) return;
   const cronExpr = toCron(schedule.cron);
   if (!cronExpr) {
@@ -55,7 +54,7 @@ function register(schedule) {
     return;
   }
   try {
-    const task = cron.schedule(cronExpr, runJob(schedule, vm), { timezone: Intl.DateTimeFormat().resolvedOptions().timeZone });
+    const task = cron.schedule(cronExpr, runJob(schedule), { timezone: Intl.DateTimeFormat().resolvedOptions().timeZone });
     jobs.set(schedule.id, task);
     logger.info(`[cron] registered "${schedule.name}" ${cronExpr}`);
   } catch (e) {
@@ -71,54 +70,63 @@ function unregister(id) {
   }
 }
 
-function loadAll() {
-  for (const s of db.prepare('SELECT * FROM schedules WHERE enabled = 1').all()) {
-    register(s);
+async function loadAll() {
+  const all = await collections.schedules.find({ enabled: 1 }).toArray();
+  for (const s of all) {
+    await register(s);
   }
 }
 
-function reload() {
+async function reload() {
   for (const id of jobs.keys()) unregister(id);
-  loadAll();
+  await loadAll();
 }
 
-function add(data, user) {
+async function add(data, user) {
   const cronExpr = toCron(data.cron);
   if (!cronExpr) throw new Error('Invalid cron expression');
   if (!['start', 'stop', 'restart', 'backup'].includes(data.action)) throw new Error('Invalid action');
-  const info = db.prepare(
-    'INSERT INTO schedules (vm_id, name, cron, action, enabled, created_at) VALUES (?,?,?,?,?,?)'
-  ).run(data.vm_id, data.name, cronExpr, data.action, data.enabled ? 1 : 0, new Date().toISOString());
-  const sched = db.prepare('SELECT * FROM schedules WHERE id = ?').get(Number(info.lastInsertRowid));
-  register(sched);
-  logActivity({ user_id: user ? user.id : null, vm_id: data.vm_id, event: 'schedule:create', details: data });
-  return sched;
+  const id = await getNextId('schedules');
+  const doc = {
+    id,
+    vm_id: Number(data.vm_id),
+    name: data.name,
+    cron: cronExpr,
+    action: data.action,
+    enabled: data.enabled ? 1 : 0,
+    last_run_at: null,
+    next_run_at: null,
+    created_at: new Date().toISOString(),
+  };
+  await collections.schedules.insertOne(doc);
+  await register(doc);
+  await logActivity({ user_id: user ? user.id : null, vm_id: data.vm_id, event: 'schedule:create', details: data });
+  return doc;
 }
 
-function update(id, data, user) {
-  const sched = db.prepare('SELECT * FROM schedules WHERE id = ?').get(id);
+async function update(id, data, user) {
+  const sched = await collections.schedules.findOne({ id: Number(id) });
   if (!sched) throw new Error('Schedule not found');
   const cronExpr = data.cron ? toCron(data.cron) : sched.cron;
-  db.prepare('UPDATE schedules SET name = ?, cron = ?, action = ?, enabled = ? WHERE id = ?')
-    .run(
-      data.name ?? sched.name,
-      cronExpr,
-      data.action ?? sched.action,
-      data.enabled !== undefined ? (data.enabled ? 1 : 0) : sched.enabled,
-      id
-    );
-  const updated = db.prepare('SELECT * FROM schedules WHERE id = ?').get(id);
-  register(updated);
-  logActivity({ user_id: user ? user.id : null, vm_id: sched.vm_id, event: 'schedule:update', details: data });
+  const $set = {
+    name: data.name ?? sched.name,
+    cron: cronExpr,
+    action: data.action ?? sched.action,
+    enabled: data.enabled !== undefined ? (data.enabled ? 1 : 0) : sched.enabled,
+  };
+  await collections.schedules.updateOne({ id: Number(id) }, { $set });
+  const updated = await collections.schedules.findOne({ id: Number(id) });
+  await register(updated);
+  await logActivity({ user_id: user ? user.id : null, vm_id: sched.vm_id, event: 'schedule:update', details: data });
   return updated;
 }
 
-function remove(id, user) {
-  const sched = db.prepare('SELECT * FROM schedules WHERE id = ?').get(id);
+async function remove(id, user) {
+  const sched = await collections.schedules.findOne({ id: Number(id) });
   if (!sched) throw new Error('Schedule not found');
   unregister(id);
-  db.prepare('DELETE FROM schedules WHERE id = ?').run(id);
-  logActivity({ user_id: user ? user.id : null, vm_id: sched.vm_id, event: 'schedule:delete', details: { name: sched.name } });
+  await collections.schedules.deleteOne({ id: Number(id) });
+  await logActivity({ user_id: user ? user.id : null, vm_id: sched.vm_id, event: 'schedule:delete', details: { name: sched.name } });
   return true;
 }
 

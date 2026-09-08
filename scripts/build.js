@@ -10,7 +10,7 @@ const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
 const config = require('../src/lib/config');
-const { db } = require('../src/lib/db');
+const { initDb, closeDb, collections } = require('../src/lib/db');
 const vmService = require('../src/services/vmService');
 
 const check = process.argv.includes('--check');
@@ -26,6 +26,7 @@ function hasBin(b) {
   catch (_) { return false; }
 }
 
+(async () => {
 console.log('');
 console.log('  vpanel build');
 console.log('  =================');
@@ -41,8 +42,13 @@ for (const d of [
 console.log('[ok] directories ready');
 
 // 2. database
-const t = db.prepare('SELECT COUNT(*) c FROM users').get();
-console.log(`[ok] database ready (${t.c} users)`);
+try {
+  await initDb();
+  const userCount = await collections.users.countDocuments();
+  console.log(`[ok] database ready (${userCount} users)`);
+} catch (e) {
+  errors.push(`MongoDB connection failed: ${e.message}`);
+}
 
 // 3. dependencies
 console.log('[info] system dependency report:');
@@ -93,7 +99,10 @@ for (const e of errors) console.log(`[error] ${e}`);
 console.log('');
 
 if (check && (errors.length || warnings.length)) {
+  await closeDb();
   process.exit(1);
 }
 
 console.log('[done] Build complete. Run with: npm start  (or pm2 start ecosystem.config.js)');
+await closeDb();
+})();

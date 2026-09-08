@@ -2,7 +2,7 @@ const express = require('express');
 const fs = require('fs');
 const path = require('path');
 const config = require('../lib/config');
-const { db, settings } = require('../lib/db');
+const { collections, settings } = require('../lib/db');
 const vmService = require('../services/vmService');
 const backupService = require('../services/backupService');
 const authService = require('../services/authService');
@@ -27,46 +27,62 @@ function render(res, view, vars = {}) {
 
 const nodeService = require('../services/nodeService');
 
-router.get('/admin', (req, res) => {
-  const vms = vmService.dbVms().map(vmService.serializeVm);
-  const users = db.prepare('SELECT id, username, email, role, suspended, verified, created_at, last_login_at FROM users').all();
-  const running = vms.filter((v) => v.status === 'running').length;
-  const totalDisk = vms.reduce((a, v) => a + parseInt(v.disk_size || '0'), 0);
-  const recentLogs = activity.listActivity({ limit: 12 });
-  const nodeStats = nodeService.getNodeLiveStats();
-  render(res, 'dashboard', { vms, users, running, totalDisk, recentLogs, usage: vmService.usage(), nodeStats });
-});
-
-router.get('/admin/nodes', (req, res) => {
-  const nodeStats = nodeService.getNodeLiveStats();
-  const vms = vmService.dbVms().map(vmService.serializeVm);
-  render(res, 'nodes', { nodeStats, vms });
-});
-
-router.get('/admin/nodes/status', (req, res) => {
+router.get('/admin', async (req, res, next) => {
   try {
-    const stats = nodeService.getNodeLiveStats();
+    const vms = (await vmService.dbVms()).map(vmService.serializeVm);
+    const users = await collections.users.find({}, { projection: { id: 1, username: 1, email: 1, role: 1, suspended: 1, verified: 1, created_at: 1, last_login_at: 1 } }).toArray();
+    const running = vms.filter((v) => v.status === 'running').length;
+    const totalDisk = vms.reduce((a, v) => a + parseInt(v.disk_size || '0'), 0);
+    const recentLogs = await activity.listActivity({ limit: 12 });
+    const nodeStats = await nodeService.getNodeLiveStats();
+    render(res, 'dashboard', { vms, users, running, totalDisk, recentLogs, usage: vmService.usage(), nodeStats });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get('/admin/nodes', async (req, res, next) => {
+  try {
+    const nodeStats = await nodeService.getNodeLiveStats();
+    const vms = (await vmService.dbVms()).map(vmService.serializeVm);
+    render(res, 'nodes', { nodeStats, vms });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get('/admin/nodes/status', async (req, res) => {
+  try {
+    const stats = await nodeService.getNodeLiveStats();
     res.json({ ok: true, stats });
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message });
   }
 });
 
-router.get('/admin/servers', (req, res) => {
-  const vms = vmService.dbVms().map(vmService.serializeVm);
-  render(res, 'servers', { vms });
+router.get('/admin/servers', async (req, res, next) => {
+  try {
+    const vms = (await vmService.dbVms()).map(vmService.serializeVm);
+    render(res, 'servers', { vms });
+  } catch (err) {
+    next(err);
+  }
 });
 
-router.get('/admin/servers/create', (req, res) => {
-  const users = db.prepare('SELECT id, username, email FROM users ORDER BY username').all();
-  render(res, 'create', { osList: vmService.getOsList(), users });
+router.get('/admin/servers/create', async (req, res, next) => {
+  try {
+    const users = await collections.users.find({}, { projection: { id: 1, username: 1, email: 1 } }).sort({ username: 1 }).toArray();
+    render(res, 'create', { osList: vmService.getOsList(), users });
+  } catch (err) {
+    next(err);
+  }
 });
 
 router.post('/admin/servers/create', createUpload.fields([{ name: 'image', maxCount: 1 }]), async (req, res) => {
   try {
     const files = req.files || {};
     const ownerId = parseInt(req.body.owner_id || req.user.id, 10);
-    const owner = db.prepare('SELECT * FROM users WHERE id = ?').get(ownerId);
+    const owner = await collections.users.findOne({ id: ownerId });
     if (!owner) return res.status(400).json({ error: 'Owner not found' });
     const data = { ...req.body };
     try { if (data.port_forwards) data.port_forwards = JSON.parse(data.port_forwards); } catch (_) { data.port_forwards = []; }
@@ -85,82 +101,115 @@ router.post('/admin/servers/create', createUpload.fields([{ name: 'image', maxCo
   }
 });
 
-router.post('/admin/servers/:id/action', (req, res) => {
-  const vm = vmService.getVm(req.params.id);
+router.post('/admin/servers/:id/action', async (req, res) => {
+  const vm = await vmService.getVm(req.params.id);
   if (!vm) return res.status(404).json({ error: 'Server not found' });
   const { action } = req.body;
   try {
-    if (action === 'start') vmService.start(vm, { user: req.user }).then(() => res.json({ ok: true, status: 'running' }));
-    else if (action === 'stop') res.json({ ok: true, status: vmService.stop(vm, { user: req.user }).status });
-    else if (action === 'kill') res.json({ ok: true, status: vmService.stop(vm, { user: req.user, force: true }).status });
-    else if (action === 'restart') vmService.restart(vm, req.user).then(() => res.json({ ok: true, status: 'running' }));
-    else if (action === 'delete') res.json(vmService.remove(vm, req.user));
-    else res.status(400).json({ error: 'Unknown action' });
+    if (action === 'start') {
+      await vmService.start(vm, { user: req.user });
+      return res.json({ ok: true, status: 'running' });
+    } else if (action === 'stop') {
+      const s = await vmService.stop(vm, { user: req.user });
+      return res.json({ ok: true, status: s.status });
+    } else if (action === 'kill') {
+      const s = await vmService.stop(vm, { user: req.user, force: true });
+      return res.json({ ok: true, status: s.status });
+    } else if (action === 'restart') {
+      await vmService.restart(vm, req.user);
+      return res.json({ ok: true, status: 'running' });
+    } else if (action === 'delete') {
+      const s = await vmService.remove(vm, req.user);
+      return res.json(s);
+    } else {
+      return res.status(400).json({ error: 'Unknown action' });
+    }
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
 });
 
-router.post('/admin/servers/:id/transfer', express.json(), (req, res) => {
-  const vm = vmService.getVm(req.params.id);
+router.post('/admin/servers/:id/transfer', express.json(), async (req, res) => {
+  const vm = await vmService.getVm(req.params.id);
   if (!vm) return res.status(404).json({ error: 'Server not found' });
   const { owner_id } = req.body;
   if (!owner_id) return res.status(400).json({ error: 'Owner ID is required' });
   try {
-    const updated = vmService.transferOwner(vm, parseInt(owner_id, 10), req.user);
+    const updated = await vmService.transferOwner(vm, parseInt(owner_id, 10), req.user);
     res.json({ ok: true, vm: vmService.serializeVm(updated) });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
 });
 
-router.get('/admin/servers/:id', (req, res) => {
-  const vm = vmService.getVm(req.params.id);
-  if (!vm) return res.status(404).render('error/404', { code: 404, title: 'Not Found', message: 'Server not found', settings: settings.all(), user: req.user });
-  const backups = backupService.listForVm(vm.id);
-  const schedules = db.prepare('SELECT * FROM schedules WHERE vm_id = ?').all(vm.id);
-  const subs = db.prepare('SELECT s.*, u.username FROM subusers s JOIN users u ON u.id = s.user_id WHERE s.vm_id = ?').all(vm.id);
-  const allUsers = db.prepare('SELECT id, username, email FROM users ORDER BY username').all();
-  render(res, 'serverDetail', { vm, backups, schedules, subs, allUsers, uptime: vmService.uptimeSeconds(vm), mem: vmService.memUsage(vm) });
-});
-
-router.get('/admin/users', (req, res) => {
-  const users = db.prepare(
-    `SELECT u.*,
-      (SELECT COUNT(*) FROM vms WHERE owner_id = u.id) AS vm_count
-     FROM users u ORDER BY u.id DESC`
-  ).all();
-  render(res, 'users', { users });
-});
-
-router.get('/admin/users/:id', (req, res) => {
-  const target = authService.findById(req.params.id);
-  if (!target) return res.redirect('/admin/users');
-  const vms = db.prepare('SELECT * FROM vms WHERE owner_id = ?').all(target.id).map(vmService.serializeVm);
-  const otherVms = db.prepare('SELECT v.*, u.username as owner_username FROM vms v JOIN users u ON u.id = v.owner_id WHERE v.owner_id != ? ORDER BY v.name').all(target.id).map(vmService.serializeVm);
-  const loginHistory = activity.listLoginHistory({ user_id: target.id, limit: 100 });
-  const logs = activity.listActivity({ user_id: target.id, limit: 100 });
-  render(res, 'userDetail', { target: authService.publicUser(target), vms, otherVms, loginHistory, logs });
-});
-
-router.post('/admin/users/:id/assign-vm', express.json(), (req, res) => {
-  const target = authService.findById(req.params.id);
-  if (!target) return res.status(404).json({ error: 'User not found' });
-  const { vm_id } = req.body;
-  if (!vm_id) return res.status(400).json({ error: 'VM ID is required' });
-  const vm = vmService.getVm(vm_id);
-  if (!vm) return res.status(404).json({ error: 'Server not found' });
+router.get('/admin/servers/:id', async (req, res, next) => {
   try {
-    vmService.transferOwner(vm, target.id, req.user);
+    const vm = await vmService.getVm(req.params.id);
+    if (!vm) return res.status(404).render('error/404', { code: 404, title: 'Not Found', message: 'Server not found', settings: settings.all(), user: req.user });
+    const backups = await backupService.listForVm(vm.id);
+    const schedules = await collections.schedules.find({ vm_id: Number(vm.id) }).toArray();
+    const subsRaw = await collections.subusers.find({ vm_id: Number(vm.id) }).toArray();
+    const userIds = subsRaw.map(s => Number(s.user_id));
+    const subUsers = userIds.length ? await collections.users.find({ id: { $in: userIds } }).toArray() : [];
+    const userMap = new Map(subUsers.map(u => [u.id, u]));
+    const subs = subsRaw.map(s => ({ ...s, username: userMap.get(s.user_id)?.username || '' }));
+    const allUsers = await collections.users.find({}, { projection: { id: 1, username: 1, email: 1 } }).sort({ username: 1 }).toArray();
+    render(res, 'serverDetail', { vm, backups, schedules, subs, allUsers, uptime: vmService.uptimeSeconds(vm), mem: vmService.memUsage(vm) });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get('/admin/users', async (req, res, next) => {
+  try {
+    const users = await collections.users.find().sort({ id: -1 }).toArray();
+    const vms = await collections.vms.find({}, { projection: { owner_id: 1 } }).toArray();
+    const countMap = {};
+    for (const v of vms) countMap[v.owner_id] = (countMap[v.owner_id] || 0) + 1;
+    for (const u of users) u.vm_count = countMap[u.id] || 0;
+    render(res, 'users', { users });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get('/admin/users/:id', async (req, res, next) => {
+  try {
+    const target = await authService.findById(req.params.id);
+    if (!target) return res.redirect('/admin/users');
+    const vmsDocs = await collections.vms.find({ owner_id: Number(target.id) }).toArray();
+    const vms = vmsDocs.map(vmService.serializeVm);
+    const otherDocs = await collections.vms.find({ owner_id: { $ne: Number(target.id) } }).sort({ name: 1 }).toArray();
+    const otherOwnerIds = [...new Set(otherDocs.map(v => Number(v.owner_id)))];
+    const otherOwners = otherOwnerIds.length ? await collections.users.find({ id: { $in: otherOwnerIds } }).toArray() : [];
+    const ownerMap = new Map(otherOwners.map(o => [o.id, o.username]));
+    const otherVms = otherDocs.map(v => ({ ...vmService.serializeVm(v), owner_username: ownerMap.get(v.owner_id) || '' }));
+    const loginHistory = await activity.listLoginHistory({ user_id: target.id, limit: 100 });
+    const logs = await activity.listActivity({ user_id: target.id, limit: 100 });
+    render(res, 'userDetail', { target: authService.publicUser(target), vms, otherVms, loginHistory, logs });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/admin/users/:id/assign-vm', express.json(), async (req, res) => {
+  try {
+    const target = await authService.findById(req.params.id);
+    if (!target) return res.status(404).json({ error: 'User not found' });
+    const { vm_id } = req.body;
+    if (!vm_id) return res.status(400).json({ error: 'VM ID is required' });
+    const vm = await vmService.getVm(vm_id);
+    if (!vm) return res.status(404).json({ error: 'Server not found' });
+    await vmService.transferOwner(vm, target.id, req.user);
     res.json({ ok: true });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
 });
 
-router.post('/admin/users/create', express.json(), (req, res) => {
+router.post('/admin/users/create', express.json(), async (req, res) => {
   try {
-    const user = authService.createUser({
+    const user = await authService.createUser({
       username: req.body.username,
       email: req.body.email,
       password: req.body.password,
@@ -174,54 +223,103 @@ router.post('/admin/users/create', express.json(), (req, res) => {
   }
 });
 
-router.post('/admin/users/:id/update', express.json(), (req, res) => {
+router.post('/admin/users/:id/update', express.json(), async (req, res) => {
   try {
-    const target = authService.findById(req.params.id);
+    const target = await authService.findById(req.params.id);
     if (!target) return res.status(404).json({ error: 'User not found' });
-    if ((req.body.suspended === false || req.body.role === 'user' || req.body.root_admin === false) && target.root_admin && authService.countAdmins() <= 1) {
+    if ((req.body.suspended === false || req.body.role === 'user' || req.body.root_admin === false) && target.root_admin && (await authService.countAdmins()) <= 1) {
       return res.status(400).json({ error: 'Cannot demote the last admin' });
     }
-    const updated = authService.updateUser(target.id, req.body);
-    activity.logActivity({ user_id: req.user.id, event: 'admin:user_update', details: { target: target.username, ...req.body } });
+    const updated = await authService.updateUser(target.id, req.body);
+    await activity.logActivity({ user_id: req.user.id, event: 'admin:user_update', details: { target: target.username, ...req.body } });
     return res.json({ ok: true, user: authService.publicUser(updated) });
   } catch (e) {
     return res.status(500).json({ error: e.message });
   }
 });
 
-router.post('/admin/users/:id/delete', (req, res) => {
+router.post('/admin/users/:id/delete', async (req, res) => {
   try {
-    const target = authService.findById(req.params.id);
+    const target = await authService.findById(req.params.id);
     if (!target) return res.status(404).json({ error: 'User not found' });
-    if (target.root_admin && authService.countAdmins() <= 1) {
+    if (target.root_admin && (await authService.countAdmins()) <= 1) {
       return res.status(400).json({ error: 'Cannot delete the last admin' });
     }
     if (target.id === req.user.id) return res.status(400).json({ error: 'You cannot delete your own account' });
-    authService.deleteUser(target.id);
-    activity.logActivity({ user_id: req.user.id, event: 'admin:user_delete', details: { target: target.username } });
+    await authService.deleteUser(target.id);
+    await activity.logActivity({ user_id: req.user.id, event: 'admin:user_delete', details: { target: target.username } });
     return res.json({ ok: true });
   } catch (e) {
     return res.status(500).json({ error: e.message });
   }
 });
 
-router.post('/admin/users/:id/suspend', (req, res) => {
+router.post('/admin/users/:id/suspend', async (req, res) => {
   try {
-    const target = authService.findById(req.params.id);
+    const target = await authService.findById(req.params.id);
     if (!target) return res.status(404).json({ error: 'User not found' });
-    if (target.root_admin && authService.countAdmins() <= 1) return res.status(400).json({ error: 'Cannot suspend the last admin' });
+    if (target.root_admin && (await authService.countAdmins()) <= 1) return res.status(400).json({ error: 'Cannot suspend the last admin' });
     const suspend = req.body.suspend !== false;
-    authService.updateUser(target.id, { suspended: suspend });
-    activity.logActivity({ user_id: req.user.id, event: suspend ? 'admin:user_suspend' : 'admin:user_unsuspend', details: { target: target.username } });
+    await authService.updateUser(target.id, { suspended: suspend });
+    await activity.logActivity({ user_id: req.user.id, event: suspend ? 'admin:user_suspend' : 'admin:user_unsuspend', details: { target: target.username } });
     return res.json({ ok: true, suspended: suspend });
   } catch (e) {
     return res.status(500).json({ error: e.message });
   }
 });
 
-router.get('/admin/activity', (req, res) => {
-  const logs = activity.listActivity({ limit: 500 });
-  render(res, 'activity', { logs });
+router.post('/admin/users/:id/impersonate', async (req, res) => {
+  try {
+    const target = await authService.findById(req.params.id);
+    if (!target) return res.status(404).json({ error: 'User not found' });
+    if (target.suspended) return res.status(400).json({ error: 'Cannot impersonate a suspended user' });
+
+    let adminToken = req.cookies?.token;
+    if (!adminToken && req.headers?.authorization?.startsWith('Bearer ')) {
+      adminToken = req.headers.authorization.slice(7).trim();
+    }
+    if (!adminToken) {
+      adminToken = authService.generateToken(req.user);
+    }
+
+    const userToken = authService.generateToken(target);
+
+    res.cookie('vpanel_impersonate_admin', adminToken, {
+      httpOnly: true,
+      secure: false,
+      sameSite: 'lax',
+      maxAge: 86400000,
+    });
+    res.cookie('token', userToken, {
+      httpOnly: true,
+      secure: false,
+      sameSite: 'lax',
+      maxAge: 86400000,
+    });
+
+    await activity.logActivity({
+      user_id: req.user.id,
+      event: 'auth:impersonate_start',
+      details: { admin: req.user.username, target: target.username, target_id: target.id },
+      ip: req.ip,
+    });
+
+    if (req.xhr || req.headers.accept?.includes('application/json')) {
+      return res.json({ ok: true, redirect: '/dashboard', target: target.username });
+    }
+    return res.redirect('/dashboard');
+  } catch (e) {
+    return res.status(500).json({ error: e.message });
+  }
+});
+
+router.get('/admin/activity', async (req, res, next) => {
+  try {
+    const logs = await activity.listActivity({ limit: 500 });
+    render(res, 'activity', { logs });
+  } catch (err) {
+    next(err);
+  }
 });
 
 router.get('/admin/settings', (req, res) => {
@@ -234,17 +332,17 @@ router.get('/admin/settings', (req, res) => {
   render(res, 'settings', { all, wallpapers, updated: req.query.updated || '' });
 });
 
-router.post('/admin/settings', express.json(), (req, res) => {
+router.post('/admin/settings', express.json(), async (req, res) => {
   const body = req.body || {};
   for (const [k, v] of Object.entries(body)) {
     if (k === 'panel.name') continue; // guarded
     settings.set(k, v);
   }
-  activity.logActivity({ user_id: req.user.id, event: 'admin:settings_update', details: Object.keys(body) });
+  await activity.logActivity({ user_id: req.user.id, event: 'admin:settings_update', details: Object.keys(body) });
   return res.json({ ok: true, settings: settings.all() });
 });
 
-router.post('/admin/settings/general', express.urlencoded({ extended: true }), (req, res) => {
+router.post('/admin/settings/general', express.urlencoded({ extended: true }), async (req, res) => {
   const save = (key) => {
     if (req.body[key] !== undefined) settings.set(key, req.body[key]);
   };
@@ -350,5 +448,14 @@ router.post('/admin/wallpapers/apply', express.json(), (req, res) => {
   if (overlay !== undefined) settings.set('panel.bg_overlay', String(overlay));
   return res.json({ ok: true, message: 'Wallpaper applied successfully' });
 });
+
+router.use('/admin/mongodb', require('./webAdminMongo'));
+router.use('/admin/storage', require('./webAdminStorage'));
+router.use('/admin/network', require('./webAdminNetwork'));
+router.use('/admin/billing', require('./webAdminBilling'));
+router.use('/admin/updates', require('./webAdminUpdates'));
+router.use('/admin/api', require('./webAdminApiManager'));
+router.use('/admin/audit', require('./webAdminAudit'));
+router.use('/admin/plugins', require('./webAdminPlugins'));
 
 module.exports = router;

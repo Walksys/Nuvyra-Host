@@ -245,20 +245,25 @@ do_create_user() {
   CREATEUSER_ROLE=admin \
   node -e "
     const auth = require('./src/services/authService');
-    const { db } = require('./src/lib/db');
+    const { initDb, closeDb, collections } = require('./src/lib/db');
     const username = process.env.CREATEUSER_USERNAME;
     const email = process.env.CREATEUSER_EMAIL;
     const password = process.env.CREATEUSER_PASSWORD;
     const name = process.env.CREATEUSER_NAME || username;
 
-    const existing = db.prepare('SELECT * FROM users WHERE username = ? OR email = ?').get(username, email);
-    if (existing) {
-      auth.updateUser(existing.id, { password, role: 'admin', root_admin: 1, suspended: 0, verified: 1 });
-      console.log('[✔] Administrator user ' + username + ' password updated and promoted to Root Admin.');
-    } else {
-      auth.createUser({ username, email, password, name, role: 'admin', root_admin: 1, verified: 1 });
-      console.log('[✔] Administrator user ' + username + ' created successfully.');
-    }
+    (async () => {
+      await initDb();
+      const existing = await collections.users.findOne({ \$or: [{ username }, { email }] });
+      if (existing) {
+        await auth.updateUser(existing.id, { password, role: 'admin', root_admin: 1, suspended: 0, verified: 1 });
+        console.log('[✔] Administrator user ' + username + ' password updated and promoted to Root Admin.');
+      } else {
+        const u = await auth.createUser({ username, email, password, name, role: 'admin', verified: 1 });
+        await collections.users.updateOne({ id: u.id }, { \$set: { root_admin: 1 } });
+        console.log('[✔] Administrator user ' + username + ' created successfully.');
+      }
+      await closeDb();
+    })().catch((err) => { console.error(err); process.exit(1); });
   "
 
   log_ok "Administrator account '${A_USER}' is ready for login."

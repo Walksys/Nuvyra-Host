@@ -1,155 +1,46 @@
-const Database = require('better-sqlite3');
-const fs = require('fs');
-const path = require('path');
+const { MongoClient } = require('mongodb');
 const config = require('./config');
 const logger = require('./logger');
 
-if (!fs.existsSync(path.dirname(config.dbPath))) {
-  fs.mkdirSync(path.dirname(config.dbPath), { recursive: true });
+const client = new MongoClient(config.mongoUri, {
+  maxPoolSize: 20,
+  minPoolSize: 2,
+  serverSelectionTimeoutMS: 5000,
+});
+
+let dbInstance = null;
+let connectingPromise = null;
+const collections = {};
+const settingsCache = {};
+
+async function getNextId(name) {
+  await ensureConnected();
+  let maxId = 0;
+  try {
+    if (collections[name]) {
+      const highest = await collections[name]
+        .find({ id: { $type: 'number' } })
+        .sort({ id: -1 })
+        .limit(1)
+        .toArray();
+      if (highest.length > 0 && typeof highest[0].id === 'number') {
+        maxId = highest[0].id;
+      }
+    }
+  } catch (_) {}
+
+  const ret = await collections.counters.findOneAndUpdate(
+    { _id: name },
+    { $inc: { seq: 1 } },
+    { upsert: true, returnDocument: 'after' }
+  );
+  let nextSeq = typeof ret.seq === 'number' ? ret.seq : (ret.value?.seq || 1);
+  if (nextSeq <= maxId) {
+    nextSeq = maxId + 1;
+    await collections.counters.updateOne({ _id: name }, { $set: { seq: nextSeq } });
+  }
+  return nextSeq;
 }
-
-const db = new Database(config.dbPath);
-db.pragma('journal_mode = WAL');
-db.pragma('foreign_keys = ON');
-
-db.exec(`
-CREATE TABLE IF NOT EXISTS users (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  username TEXT UNIQUE NOT NULL,
-  email TEXT UNIQUE NOT NULL,
-  password TEXT NOT NULL,
-  name TEXT,
-  role TEXT NOT NULL DEFAULT 'user',
-  root_admin INTEGER NOT NULL DEFAULT 0,
-  language TEXT NOT NULL DEFAULT 'en',
-  avatar TEXT,
-  verified INTEGER NOT NULL DEFAULT 0,
-  verify_token TEXT,
-  suspended INTEGER NOT NULL DEFAULT 0,
-  tfa_enabled INTEGER NOT NULL DEFAULT 0,
-  tfa_secret TEXT,
-  last_login_at TEXT,
-  last_login_ip TEXT,
-  created_at TEXT NOT NULL,
-  updated_at TEXT NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS login_attempts (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  user_id INTEGER,
-  ip TEXT,
-  username TEXT,
-  status TEXT,
-  created_at TEXT NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS reset_tokens (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  user_id INTEGER NOT NULL,
-  token TEXT NOT NULL,
-  expires_at TEXT NOT NULL,
-  used INTEGER NOT NULL DEFAULT 0,
-  created_at TEXT NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS vms (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  uuid TEXT UNIQUE NOT NULL,
-  owner_id INTEGER NOT NULL,
-  name TEXT NOT NULL,
-  os_type TEXT,
-  codename TEXT,
-  img_url TEXT,
-  hostname TEXT,
-  username TEXT,
-  password TEXT,
-  disk_size TEXT DEFAULT '20G',
-  memory INTEGER DEFAULT 2048,
-  cpus INTEGER DEFAULT 2,
-  ssh_port INTEGER NOT NULL,
-  gui_mode INTEGER NOT NULL DEFAULT 0,
-  port_forwards TEXT,
-  img_file TEXT,
-  seed_file TEXT,
-  start_on_boot INTEGER NOT NULL DEFAULT 0,
-  startup_command TEXT,
-  auto_create INTEGER NOT NULL DEFAULT 1,
-  status TEXT DEFAULT 'stopped',
-  notes TEXT,
-  created_at TEXT NOT NULL,
-  updated_at TEXT NOT NULL,
-  FOREIGN KEY (owner_id) REFERENCES users(id) ON DELETE CASCADE
-);
-
-CREATE TABLE IF NOT EXISTS subusers (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  vm_id INTEGER NOT NULL,
-  user_id INTEGER NOT NULL,
-  permissions TEXT,
-  created_at TEXT NOT NULL,
-  FOREIGN KEY (vm_id) REFERENCES vms(id) ON DELETE CASCADE,
-  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-);
-
-CREATE TABLE IF NOT EXISTS backups (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  vm_id INTEGER NOT NULL,
-  name TEXT,
-  file TEXT,
-  size INTEGER DEFAULT 0,
-  kind TEXT DEFAULT 'full',
-  created_at TEXT NOT NULL,
-  FOREIGN KEY (vm_id) REFERENCES vms(id) ON DELETE CASCADE
-);
-
-CREATE TABLE IF NOT EXISTS schedules (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  vm_id INTEGER NOT NULL,
-  name TEXT NOT NULL,
-  cron TEXT NOT NULL,
-  action TEXT NOT NULL,
-  enabled INTEGER NOT NULL DEFAULT 1,
-  last_run_at TEXT,
-  next_run_at TEXT,
-  created_at TEXT NOT NULL,
-  FOREIGN KEY (vm_id) REFERENCES vms(id) ON DELETE CASCADE
-);
-
-CREATE TABLE IF NOT EXISTS activity_logs (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  user_id INTEGER,
-  vm_id INTEGER,
-  event TEXT NOT NULL,
-  details TEXT,
-  ip TEXT,
-  user_agent TEXT,
-  created_at TEXT NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS settings (
-  key TEXT PRIMARY KEY,
-  value TEXT
-);
-
-CREATE TABLE IF NOT EXISTS notifications (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  user_id INTEGER NOT NULL,
-  title TEXT,
-  body TEXT,
-  read INTEGER NOT NULL DEFAULT 0,
-  created_at TEXT NOT NULL,
-  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-);
-
-CREATE INDEX IF NOT EXISTS idx_vms_owner ON vms(owner_id);
-CREATE INDEX IF NOT EXISTS idx_subusers_vm ON subusers(vm_id);
-CREATE INDEX IF NOT EXISTS idx_subusers_user ON subusers(user_id);
-CREATE INDEX IF NOT EXISTS idx_backups_vm ON backups(vm_id);
-CREATE INDEX IF NOT EXISTS idx_schedules_vm ON schedules(vm_id);
-CREATE INDEX IF NOT EXISTS idx_activity_user ON activity_logs(user_id);
-CREATE INDEX IF NOT EXISTS idx_activity_vm ON activity_logs(vm_id);
-CREATE INDEX IF NOT EXISTS idx_login_ip ON login_attempts(ip);
-`);
 
 const defaultSettings = {
   'panel.name': 'vpanel',
@@ -181,6 +72,25 @@ const defaultSettings = {
   'panel.accent': '#6366f1',
   'panel.theme': 'dark',
   'panel.wallpapers_api_key': '',
+  'billing.currency': 'USD',
+  'billing.currency_symbol': '$',
+  'billing.stripe_enabled': '0',
+  'billing.paypal_enabled': '0',
+  'billing.bank_transfer_enabled': '1',
+  'billing.bank_details': 'Bank: Global Cloud Bank\nAccount: 0123-4567-8901\nRouting/IFSC: GCB000452',
+  'ai.enabled': '1',
+  'ai.provider': 'offline',
+  'ai.api_key': '',
+  'ai.model': 'gpt-4o-mini',
+  'update.channel': 'stable',
+  'update.auto_check': '1',
+  'update.backup_before': '1',
+  'update.auto_pm2_restart': '1',
+  'update.repo': 'nobita329/vpanel-pro',
+  'update.last_checked': '',
+  'update.latest_version': '',
+  'update.available': '0',
+  'update.ignored_version': '',
   'mail.host': config.mail.host,
   'mail.port': String(config.mail.port),
   'mail.secure': String(config.mail.secure),
@@ -214,42 +124,142 @@ const defaultSettings = {
   ]),
 };
 
-const vmsColumns = db.prepare('PRAGMA table_info(vms)').all().map((c) => c.name);
-if (!vmsColumns.includes('vnc_port')) {
-  db.exec('ALTER TABLE vms ADD COLUMN vnc_port INTEGER');
+for (const [k, v] of Object.entries(defaultSettings)) {
+  settingsCache[k] = v;
 }
-if (!vmsColumns.includes('agent_port')) {
-  db.exec('ALTER TABLE vms ADD COLUMN agent_port INTEGER');
-}
-if (!vmsColumns.includes('agent_token')) {
-  db.exec('ALTER TABLE vms ADD COLUMN agent_token TEXT');
-}
-
-function seedSettings() {
-  const stmt = db.prepare('INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)');
-  for (const [k, v] of Object.entries(defaultSettings)) stmt.run(k, v);
-}
-seedSettings();
 
 const S = {
   get(key, fallback = null) {
-    const row = db.prepare('SELECT value FROM settings WHERE key = ?').get(key);
-    if (!row) return fallback;
-    try { return JSON.parse(row.value); } catch (_) { return row.value; }
+    if (key in settingsCache) {
+      const val = settingsCache[key];
+      try { return JSON.parse(val); } catch (_) { return val; }
+    }
+    return fallback;
   },
-  set(key, value) {
-    db.prepare(
-      'INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value'
-    ).run(key, typeof value === 'string' ? value : JSON.stringify(value));
+  async set(key, value) {
+    await ensureConnected();
+    const valStr = typeof value === 'string' ? value : JSON.stringify(value);
+    settingsCache[key] = valStr;
+    await collections.settings.updateOne(
+      { key },
+      { $set: { key, value: valStr } },
+      { upsert: true }
+    );
   },
   all() {
-    const rows = db.prepare('SELECT key, value FROM settings').all();
     const out = {};
-    for (const r of rows) {
-      try { out[r.key] = JSON.parse(r.value); } catch (_) { out[r.key] = r.value; }
+    for (const [k, v] of Object.entries(settingsCache)) {
+      try { out[k] = JSON.parse(v); } catch (_) { out[k] = v; }
     }
     return out;
   },
 };
 
-module.exports = { db, settings: S };
+async function initDb() {
+  if (dbInstance) return { db: dbInstance, collections, settings: S, getNextId };
+  await client.connect();
+  dbInstance = client.db('vpanel');
+
+  const names = [
+    'users', 'vms', 'subusers', 'backups', 'schedules',
+    'activity_logs', 'settings', 'login_attempts', 'reset_tokens',
+    'notifications', 'counters',
+    'storage_pools', 'storage_volumes', 'iso_images',
+    'network_bridges', 'ip_pools', 'port_forwards', 'firewall_rules',
+    'api_keys', 'webhooks', 'audit_events', 'plugins_config',
+    'billing_plans', 'billing_invoices', 'billing_coupons',
+    'update_history'
+  ];
+  for (const name of names) {
+    collections[name] = dbInstance.collection(name);
+  }
+
+  try {
+    await Promise.all([
+      collections.users.createIndex({ id: 1 }, { unique: true }),
+      collections.users.createIndex({ username: 1 }, { unique: true }),
+      collections.users.createIndex({ email: 1 }, { unique: true }),
+      collections.vms.createIndex({ id: 1 }, { unique: true }),
+      collections.vms.createIndex({ uuid: 1 }, { unique: true }),
+      collections.vms.createIndex({ owner_id: 1 }),
+      collections.subusers.createIndex({ id: 1 }, { unique: true }),
+      collections.subusers.createIndex({ vm_id: 1 }),
+      collections.subusers.createIndex({ user_id: 1 }),
+      collections.backups.createIndex({ id: 1 }, { unique: true }),
+      collections.backups.createIndex({ vm_id: 1 }),
+      collections.schedules.createIndex({ id: 1 }, { unique: true }),
+      collections.schedules.createIndex({ vm_id: 1 }),
+      collections.activity_logs.createIndex({ id: 1 }, { unique: true }),
+      collections.activity_logs.createIndex({ user_id: 1 }),
+      collections.activity_logs.createIndex({ vm_id: 1 }),
+      collections.activity_logs.createIndex({ created_at: -1 }),
+      collections.settings.createIndex({ key: 1 }, { unique: true }),
+      collections.login_attempts.createIndex({ ip: 1 }),
+      collections.reset_tokens.createIndex({ token: 1 }),
+      collections.notifications.createIndex({ user_id: 1 }),
+      collections.storage_pools.createIndex({ id: 1 }, { unique: true }),
+      collections.storage_volumes.createIndex({ id: 1 }, { unique: true }),
+      collections.iso_images.createIndex({ id: 1 }, { unique: true }),
+      collections.firewall_rules.createIndex({ id: 1 }, { unique: true }),
+      collections.port_forwards.createIndex({ id: 1 }, { unique: true }),
+      collections.api_keys.createIndex({ key: 1 }, { unique: true }),
+      collections.webhooks.createIndex({ id: 1 }, { unique: true }),
+      collections.audit_events.createIndex({ timestamp: -1 }),
+      collections.billing_plans.createIndex({ id: 1 }, { unique: true }),
+      collections.billing_invoices.createIndex({ id: 1 }, { unique: true }),
+      collections.billing_coupons.createIndex({ id: 1 }, { unique: true }),
+      collections.update_history.createIndex({ id: 1 }, { unique: true }),
+      collections.update_history.createIndex({ timestamp: -1 }),
+    ]);
+  } catch (e) {
+    logger.warn('[mongo] index creation: ' + e.message);
+  }
+
+  try {
+    const all = await collections.settings.find().toArray();
+    for (const row of all) {
+      settingsCache[row.key] = row.value;
+    }
+    for (const [k, v] of Object.entries(defaultSettings)) {
+      if (!(k in settingsCache)) {
+        await collections.settings.insertOne({ key: k, value: v });
+        settingsCache[k] = v;
+      }
+    }
+  } catch (e) {
+    logger.warn('[mongo] settings cache init: ' + e.message);
+  }
+
+  return { db: dbInstance, collections, settings: S, getNextId };
+}
+
+function ensureConnected() {
+  if (dbInstance) return Promise.resolve(dbInstance);
+  if (!connectingPromise) {
+    connectingPromise = initDb().then(() => dbInstance);
+  }
+  return connectingPromise;
+}
+
+ensureConnected().catch((err) => {
+  logger.error('[mongo] connection error: ' + err.message);
+});
+
+async function closeDb() {
+  try {
+    await client.close();
+  } catch (_) {}
+  dbInstance = null;
+  connectingPromise = null;
+}
+
+module.exports = {
+  client,
+  get db() { return dbInstance; },
+  collections,
+  getNextId,
+  initDb,
+  closeDb,
+  settings: S,
+  ensureConnected,
+};

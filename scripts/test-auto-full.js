@@ -2,7 +2,7 @@
  * Full Automated End-to-End Test Suite for vPanel Pro
  */
 const axios = require('axios');
-const { db, settings } = require('../src/lib/db');
+const { initDb, closeDb, collections, getNextId, settings } = require('../src/lib/db');
 const authService = require('../src/services/authService');
 const vmService = require('../src/services/vmService');
 const nodeService = require('../src/services/nodeService');
@@ -25,6 +25,7 @@ function assert(condition, message) {
 }
 
 async function runAutoFullTest() {
+  await initDb();
   console.log('\n======================================================');
   console.log('       STARTING FULL AUTOMATED TEST SUITE             ');
   console.log('======================================================\n');
@@ -33,7 +34,18 @@ async function runAutoFullTest() {
   // SECTION 1: DATABASE & USER AUTHENTICATION
   // ----------------------------------------------------
   console.log('>>> 1. Database & Authentication Tests');
-  const adminUser = db.prepare('SELECT * FROM users WHERE role = ? OR root_admin = 1 LIMIT 1').get('admin');
+  let adminUser = await collections.users.findOne({ $or: [{ role: 'admin' }, { root_admin: 1 }] });
+  if (!adminUser) {
+    adminUser = await authService.createUser({
+      username: 'admin',
+      email: 'admin@vpanel.local',
+      password: 'adminPassword123!',
+      name: 'Administrator',
+      role: 'admin',
+      verified: true,
+    });
+    await collections.users.updateOne({ id: adminUser.id }, { $set: { root_admin: 1 } });
+  }
   assert(!!adminUser, 'Admin user exists in database');
 
   const token = authService.signToken(adminUser);
@@ -46,7 +58,7 @@ async function runAutoFullTest() {
 
   // Test Register a new temporary test user
   const testUsername = 'autotest_' + Date.now();
-  const created = authService.createUser({
+  const created = await authService.createUser({
     username: testUsername,
     email: `${testUsername}@vpanel.local`,
     password: 'TestPassword123!',
@@ -56,11 +68,11 @@ async function runAutoFullTest() {
   });
   assert(!!created && created.username === testUsername, 'Create new user via authService');
 
-  const loginRes = authService.attemptLogin(testUsername, 'TestPassword123!', '127.0.0.1');
+  const loginRes = await authService.attemptLogin(testUsername, 'TestPassword123!', '127.0.0.1');
   assert(loginRes.ok === true, 'Authenticate newly created user');
 
   // Clean up test user
-  db.prepare('DELETE FROM users WHERE username = ?').run(testUsername);
+  await collections.users.deleteOne({ username: testUsername });
   assert(true, 'Test user cleaned up');
 
   // ----------------------------------------------------
@@ -79,7 +91,7 @@ async function runAutoFullTest() {
   // SECTION 3: NODES & PERFORMANCE TELEMETRY
   // ----------------------------------------------------
   console.log('\n>>> 3. Nodes & Performance Telemetry Tests');
-  const nodeStats = nodeService.getNodeLiveStats();
+  const nodeStats = await nodeService.getNodeLiveStats();
   assert(nodeStats.status === 'online', 'Node status is online');
   assert(typeof nodeStats.cpu.percent === 'number', `CPU utilization tracked: ${nodeStats.cpu.percent}%`);
   assert(Array.isArray(nodeStats.cpu.per_core), `Per-core CPU matrix tracked: ${nodeStats.cpu.per_core.length} cores`);
@@ -112,21 +124,40 @@ async function runAutoFullTest() {
   // SECTION 5: VIRTUAL MACHINES API
   // ----------------------------------------------------
   console.log('\n>>> 5. Virtual Machines & Boot Log Tests');
+  const now = new Date().toISOString();
+  const testVmId = await getNextId('vms');
+  await collections.vms.insertOne({
+    id: testVmId,
+    uuid: require('crypto').randomUUID(),
+    owner_id: adminUser.id,
+    name: 'AutoTestVM',
+    os_type: 'ubuntu',
+    codename: 'jammy',
+    hostname: 'autotestvm',
+    username: 'root',
+    password: 'pass123',
+    disk_size: '20G',
+    memory: 2048,
+    cpus: 2,
+    ssh_port: 25555,
+    gui_mode: 0,
+    status: 'stopped',
+    created_at: now,
+    updated_at: now,
+  });
+
   try {
     const vmsRes = await axios.get(`${BASE_API}/vms`, { headers: authHeaders });
     assert(vmsRes.status === 200 && Array.isArray(vmsRes.data.vms), `GET /api/vms returned ${vmsRes.data.vms.length} VMs`);
 
-    if (vmsRes.data.vms.length > 0) {
-      const vmId = vmsRes.data.vms[0].id;
-      const statusRes = await axios.get(`${BASE_API}/vms/${vmId}/status`, { headers: authHeaders });
-      assert(statusRes.data.ok === true, `GET /api/vms/${vmId}/status returned live VM telemetry`);
+    const statusRes = await axios.get(`${BASE_API}/vms/${testVmId}/status`, { headers: authHeaders });
+    assert(statusRes.data.ok === true, `GET /api/vms/${testVmId}/status returned live VM telemetry`);
 
-      const statsRes = await axios.get(`${BASE_API}/vms/${vmId}/stats`, { headers: authHeaders });
-      assert(statsRes.data.ok === true, `GET /api/vms/${vmId}/stats alias endpoint verified`);
+    const statsRes = await axios.get(`${BASE_API}/vms/${testVmId}/stats`, { headers: authHeaders });
+    assert(statsRes.data.ok === true, `GET /api/vms/${testVmId}/stats alias endpoint verified`);
 
-      const bootlogRes = await axios.get(`${BASE_API}/vms/${vmId}/bootlog`, { headers: authHeaders });
-      assert(bootlogRes.data.ok === true, `GET /api/vms/${vmId}/bootlog verified`);
-    }
+    const bootlogRes = await axios.get(`${BASE_API}/vms/${testVmId}/bootlog`, { headers: authHeaders });
+    assert(bootlogRes.data.ok === true, `GET /api/vms/${testVmId}/bootlog verified`);
   } catch (e) {
     assert(false, 'VMs API check: ' + e.message);
   }
@@ -150,14 +181,20 @@ async function runAutoFullTest() {
     { path: '/admin/users', label: 'Admin User Management' },
     { path: '/admin/activity', label: 'Admin Activity Log' },
     { path: '/admin/settings', label: 'Admin Settings & General Tab' },
-    { path: '/servers/1', label: 'VM Overview' },
-    { path: '/servers/1/console', label: 'VM Console & Terminal' },
-    { path: '/servers/1/files', label: 'VM File Manager' },
-    { path: '/servers/1/backups', label: 'VM Backups' },
-    { path: '/servers/1/schedules', label: 'VM Schedules' },
-    { path: '/servers/1/settings', label: 'VM Settings' },
-    { path: '/servers/1/startup', label: 'VM Startup' },
-    { path: '/servers/1/subusers', label: 'VM Subusers' },
+    { path: '/admin/mongodb', label: 'Admin MongoDB Studio' },
+    { path: '/admin/storage', label: 'Admin Storage Pools & ISOs' },
+    { path: '/admin/network', label: 'Admin Network & Firewall' },
+    { path: '/admin/api', label: 'Admin API & Webhooks' },
+    { path: '/admin/audit', label: 'Admin Audit & Security' },
+    { path: '/admin/plugins', label: 'Admin Plugins & Extensions' },
+    { path: `/servers/${testVmId}`, label: 'VM Overview' },
+    { path: `/servers/${testVmId}/console`, label: 'VM Console & Terminal' },
+    { path: `/servers/${testVmId}/files`, label: 'VM File Manager' },
+    { path: `/servers/${testVmId}/backups`, label: 'VM Backups' },
+    { path: `/servers/${testVmId}/schedules`, label: 'VM Schedules' },
+    { path: `/servers/${testVmId}/settings`, label: 'VM Settings' },
+    { path: `/servers/${testVmId}/startup`, label: 'VM Startup' },
+    { path: `/servers/${testVmId}/subusers`, label: 'VM Subusers' },
   ];
 
   for (const r of webRoutes) {
@@ -169,6 +206,9 @@ async function runAutoFullTest() {
     }
   }
 
+  // Clean up test VM
+  await collections.vms.deleteOne({ id: testVmId });
+
   // ----------------------------------------------------
   // SUMMARY
   // ----------------------------------------------------
@@ -176,11 +216,13 @@ async function runAutoFullTest() {
   console.log(`  TEST RESULTS: ${testsPassed} PASSED, ${testsFailed} FAILED`);
   console.log('======================================================\n');
 
+  try { await closeDb(); } catch (_) {}
   process.exit(testsFailed > 0 ? 1 : 0);
 }
 
-runAutoFullTest().catch((err) => {
+runAutoFullTest().catch(async (err) => {
   console.error('Fatal test error:', err);
+  try { await closeDb(); } catch (_) {}
   process.exit(1);
 });
 

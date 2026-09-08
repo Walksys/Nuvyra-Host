@@ -1,53 +1,104 @@
-const { db } = require('../lib/db');
+const { collections, getNextId } = require('../lib/db');
+const pluginManager = require('../lib/pluginManager');
 
-function logActivity({ user_id = null, vm_id = null, event, details = null, ip = null, user_agent = null }) {
+async function logActivity({ user_id = null, vm_id = null, event, details = null, ip = null, user_agent = null }) {
   try {
-    db.prepare(
-      'INSERT INTO activity_logs (user_id, vm_id, event, details, ip, user_agent, created_at) VALUES (?,?,?,?,?,?,?)'
-    ).run(user_id, vm_id, event, details ? JSON.stringify(details) : null, ip, user_agent, new Date().toISOString());
+    const id = await getNextId('activity_logs');
+    await collections.activity_logs.insertOne({
+      id,
+      user_id: user_id !== null ? Number(user_id) : null,
+      vm_id: vm_id !== null ? Number(vm_id) : null,
+      event,
+      details,
+      ip,
+      user_agent,
+      created_at: new Date().toISOString(),
+    });
+
+    // Dispatch to pluginManager event bus
+    pluginManager.emitPlatformEvent(
+      event,
+      {
+        ...(typeof details === 'object' && details !== null ? details : { info: details }),
+        user_id,
+        vm_id,
+      },
+      { user_id, vm_id, ip }
+    ).catch(() => {});
   } catch (e) { /* noop */ }
 }
 
-function logLogin({ user_id = null, ip, username, status }) {
+async function logLogin({ user_id = null, ip, username, status }) {
   try {
-    db.prepare(
-      'INSERT INTO login_attempts (user_id, ip, username, status, created_at) VALUES (?,?,?,?,?)'
-    ).run(user_id, ip, username, status, new Date().toISOString());
+    const id = await getNextId('login_attempts');
+    await collections.login_attempts.insertOne({
+      id,
+      user_id: user_id !== null ? Number(user_id) : null,
+      ip,
+      username,
+      status,
+      success: status === 'success',
+      timestamp: new Date().toISOString(),
+      created_at: new Date().toISOString(),
+    });
+
+    // Dispatch to pluginManager event bus
+    const eventName = status === 'success' ? 'auth:login_success' : 'auth:failed_login';
+    pluginManager.emitPlatformEvent(
+      eventName,
+      { username, ip, status },
+      { user_id, ip }
+    ).catch(() => {});
   } catch (e) { /* noop */ }
 }
 
-function listActivity({ user_id = null, vm_id = null, limit = 100, offset = 0 }) {
-  let sql = `
-    SELECT a.*, u.username, v.name as vm_name
-    FROM activity_logs a
-    LEFT JOIN users u ON u.id = a.user_id
-    LEFT JOIN vms v ON v.id = a.vm_id
-    WHERE 1=1`;
-  const params = [];
-  if (user_id) { sql += ' AND a.user_id = ?'; params.push(user_id); }
-  if (vm_id) { sql += ' AND a.vm_id = ?'; params.push(vm_id); }
-  sql += ' ORDER BY a.id DESC LIMIT ? OFFSET ?';
-  params.push(limit, offset);
-  const rows = db.prepare(sql).all(...params);
-  for (const r of rows) {
-    try { r.details = JSON.parse(r.details); } catch (_) { r.details = null; }
-  }
-  return rows;
+async function listActivity({ user_id = null, vm_id = null, limit = 100, offset = 0 }) {
+  const query = {};
+  if (user_id !== null) query.user_id = Number(user_id);
+  if (vm_id !== null) query.vm_id = Number(vm_id);
+
+  const logs = await collections.activity_logs
+    .find(query)
+    .sort({ id: -1 })
+    .skip(Number(offset) || 0)
+    .limit(Number(limit) || 100)
+    .toArray();
+
+  if (!logs.length) return [];
+
+  const userIds = [...new Set(logs.map((l) => l.user_id).filter((id) => id !== null))];
+  const vmIds = [...new Set(logs.map((l) => l.vm_id).filter((id) => id !== null))];
+
+  const [users, vms] = await Promise.all([
+    userIds.length ? collections.users.find({ id: { $in: userIds } }).toArray() : [],
+    vmIds.length ? collections.vms.find({ id: { $in: vmIds } }).toArray() : [],
+  ]);
+
+  const userMap = new Map(users.map((u) => [u.id, u.username]));
+  const vmMap = new Map(vms.map((v) => [v.id, v.name]));
+
+  return logs.map((l) => ({
+    ...l,
+    username: userMap.get(l.user_id) || null,
+    vm_name: vmMap.get(l.vm_id) || null,
+  }));
 }
 
-function listLoginHistory({ user_id = null, limit = 100, offset = 0 }) {
-  let sql = 'SELECT * FROM login_attempts WHERE 1=1';
-  const params = [];
-  if (user_id) { sql += ' AND user_id = ?'; params.push(user_id); }
-  sql += ' ORDER BY id DESC LIMIT ? OFFSET ?';
-  params.push(limit, offset);
-  return db.prepare(sql).all(...params);
+async function listLoginHistory({ user_id = null, limit = 100, offset = 0 }) {
+  const query = {};
+  if (user_id !== null) query.user_id = Number(user_id);
+
+  return collections.login_attempts
+    .find(query)
+    .sort({ id: -1 })
+    .skip(Number(offset) || 0)
+    .limit(Number(limit) || 100)
+    .toArray();
 }
 
-function recentLogin(userId) {
-  return db.prepare(
-    'SELECT * FROM login_attempts WHERE user_id = ? ORDER BY id DESC LIMIT 1'
-  ).get(userId) || null;
+async function recentLogin(userId) {
+  return collections.login_attempts
+    .findOne({ user_id: Number(userId) }, { sort: { id: -1 } });
 }
 
 module.exports = { logActivity, logLogin, listActivity, listLoginHistory, recentLogin };

@@ -6,7 +6,7 @@ const backupService = require('../services/backupService');
 const scheduleService = require('../services/scheduleService');
 const agentService = require('../services/agentService');
 const activity = require('../services/activityService');
-const { db, settings } = require('../lib/db');
+const { collections, getNextId, settings } = require('../lib/db');
 const { apiAuth, apiAdmin } = require('../middleware/auth');
 const { uploadAvatar } = require('../middleware/upload');
 const router = express.Router();
@@ -14,24 +14,28 @@ const router = express.Router();
 const json = express.json({ limit: '50mb' });
 
 // ---------- Public auth ----------
-router.post('/auth/login', json, (req, res) => {
-  const { username, password, code } = req.body;
-  const ip = req.ip || req.socket.remoteAddress;
-  const result = authService.attemptLogin(String(username || '').trim(), String(password || ''), ip);
-  if (!result.ok) return res.status(401).json({ error: result.error });
-  if (result.tfaRequired) {
-    if (!code) return res.json({ tfa_required: true, user: authService.publicUser(result.user) });
-    const check = authService.confirmTfa(result.user, code);
-    if (!check.ok) return res.status(401).json({ error: check.error });
+router.post('/auth/login', json, async (req, res, next) => {
+  try {
+    const { username, password, code } = req.body;
+    const ip = req.ip || req.socket.remoteAddress;
+    const result = await authService.attemptLogin(String(username || '').trim(), String(password || ''), ip);
+    if (!result.ok) return res.status(401).json({ error: result.error });
+    if (result.tfaRequired) {
+      if (!code) return res.json({ tfa_required: true, user: authService.publicUser(result.user) });
+      const check = authService.confirmTfa(result.user, code);
+      if (!check.ok) return res.status(401).json({ error: check.error });
+    }
+    const { token, user } = await authService.finishLogin(result.user, ip);
+    return res.json({ token, user });
+  } catch (err) {
+    next(err);
   }
-  const { token, user } = authService.finishLogin(result.user, ip);
-  return res.json({ token, user });
 });
 
-router.post('/auth/register', json, (req, res) => {
+router.post('/auth/register', json, async (req, res) => {
   if (settings.get('security.allow_register') === '0') return res.status(403).json({ error: 'Registration disabled' });
   try {
-    const user = authService.createUser({
+    const user = await authService.createUser({
       username: String(req.body.username || '').trim(),
       email: String(req.body.email || '').trim().toLowerCase(),
       password: String(req.body.password || ''),
@@ -60,65 +64,91 @@ router.use(apiAuth);
 
 router.get('/auth/me', (req, res) => res.json({ user: authService.publicUser(req.user) }));
 
-router.get('/user/activity', (req, res) => {
-  const logs = activity.listActivity({ user_id: req.user.id, limit: parseInt(req.query.limit || '100', 10) });
-  res.json({ logs });
+router.get('/user/activity', async (req, res, next) => {
+  try {
+    const logs = await activity.listActivity({ user_id: req.user.id, limit: parseInt(req.query.limit || '100', 10) });
+    res.json({ logs });
+  } catch (err) {
+    next(err);
+  }
 });
 
-router.get('/user/login-history', (req, res) => {
-  res.json({ history: activity.listLoginHistory({ user_id: req.user.id, limit: 100 }) });
+router.get('/user/login-history', async (req, res, next) => {
+  try {
+    res.json({ history: await activity.listLoginHistory({ user_id: req.user.id, limit: 100 }) });
+  } catch (err) {
+    next(err);
+  }
 });
 
-router.post('/user/profile', json, (req, res) => {
+router.post('/user/profile', json, async (req, res) => {
   try {
     const data = {};
     if (req.body.name) data.name = req.body.name;
     if (req.body.email) data.email = req.body.email;
     if (req.body.language) data.language = req.body.language;
-    const u = authService.updateUser(req.user.id, data);
+    const u = await authService.updateUser(req.user.id, data);
     return res.json({ ok: true, user: authService.publicUser(u) });
   } catch (e) {
     return res.status(500).json({ error: e.message });
   }
 });
 
-router.post('/user/avatar', uploadAvatar.single('avatar'), (req, res) => {
+router.post('/user/avatar', uploadAvatar.single('avatar'), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file' });
   const url = `/uploads/avatar/${req.file.filename}`;
-  authService.updateUser(req.user.id, { avatar: url });
+  await authService.updateUser(req.user.id, { avatar: url });
   res.json({ ok: true, avatar: url });
 });
 
-router.post('/user/password', json, (req, res) => {
+router.post('/user/password', json, async (req, res) => {
   const bcrypt = require('bcryptjs');
   if (!bcrypt.compareSync(req.body.current, req.user.password)) return res.status(400).json({ error: 'Current password incorrect' });
   if (!req.body.password || req.body.password.length < 6) return res.status(400).json({ error: 'Password too short' });
-  authService.updateUser(req.user.id, { password: req.body.password });
+  await authService.updateUser(req.user.id, { password: req.body.password });
   res.json({ ok: true });
 });
 
 // ---------- VMs ----------
-function loadVm(req, res, next) {
-  const vm = vmService.getVm(req.params.id);
-  if (!vm || !vmService.canAccess(req.user, vm)) return res.status(404).json({ error: 'Server not found' });
-  const row = db.prepare('SELECT agent_token FROM vms WHERE id = ?').get(vm.id);
-  if (row && row.agent_token) {
-    Object.defineProperty(vm, 'agent_token', { value: row.agent_token, enumerable: false, configurable: true });
+async function loadVm(req, res, next) {
+  try {
+    const vm = await vmService.getVm(req.params.id);
+    if (!vm || !(await vmService.canAccess(req.user, vm))) return res.status(404).json({ error: 'Server not found' });
+    const row = await collections.vms.findOne({ id: Number(vm.id) }, { projection: { agent_token: 1 } });
+    if (row && row.agent_token) {
+      Object.defineProperty(vm, 'agent_token', { value: row.agent_token, enumerable: false, configurable: true });
+    }
+    req.vm = vm;
+    next();
+  } catch (err) {
+    next(err);
   }
-  req.vm = vm;
-  next();
 }
 
-router.get('/vms', (req, res) => {
-  if (req.user.role === 'admin' || req.user.root_admin) {
-    const all = db.prepare('SELECT v.*, u.username as owner_username, u.email as owner_email FROM vms v JOIN users u ON u.id = v.owner_id ORDER BY v.id DESC').all().map(vmService.serializeVm);
-    return res.json({ vms: all });
+router.get('/vms', async (req, res, next) => {
+  try {
+    if (req.user.role === 'admin' || req.user.root_admin) {
+      const allDocs = await collections.vms.find().sort({ id: -1 }).toArray();
+      const ownerIds = [...new Set(allDocs.map(v => Number(v.owner_id)))];
+      const owners = ownerIds.length ? await collections.users.find({ id: { $in: ownerIds } }).toArray() : [];
+      const ownerMap = new Map(owners.map(o => [o.id, o]));
+      const all = allDocs.map(v => {
+        const o = ownerMap.get(v.owner_id);
+        const s = vmService.serializeVm(v);
+        s.owner_username = o?.username || '';
+        s.owner_email = o?.email || '';
+        return s;
+      });
+      return res.json({ vms: all });
+    }
+    const mineDocs = await collections.vms.find({ owner_id: Number(req.user.id) }).sort({ id: -1 }).toArray();
+    const subDocs = await collections.subusers.find({ user_id: Number(req.user.id) }).toArray();
+    const vmIds = subDocs.map(s => Number(s.vm_id));
+    const sharedDocs = vmIds.length ? await collections.vms.find({ id: { $in: vmIds } }).toArray() : [];
+    res.json({ vms: [...mineDocs.map(vmService.serializeVm), ...sharedDocs.map(vmService.serializeVm)] });
+  } catch (err) {
+    next(err);
   }
-  const mine = db.prepare('SELECT * FROM vms WHERE owner_id = ?').all(req.user.id).map(vmService.serializeVm);
-  const shared = db.prepare(
-    'SELECT v.* FROM subusers s JOIN vms v ON v.id = s.vm_id WHERE s.user_id = ?'
-  ).all(req.user.id).map(vmService.serializeVm);
-  res.json({ vms: [...mine, ...shared] });
 });
 
 router.post('/vms', json, async (req, res) => {
@@ -135,9 +165,13 @@ router.post('/vms/:id/start', loadVm, async (req, res) => {
   try { await vmService.start(req.vm, { user: req.user }); res.json({ ok: true }); }
   catch (e) { res.status(500).json({ error: e.message }); }
 });
-router.post('/vms/:id/stop', loadVm, (req, res) => {
-  vmService.stop(req.vm, { user: req.user, force: !!req.body.force });
-  res.json({ ok: true });
+router.post('/vms/:id/stop', loadVm, async (req, res) => {
+  try {
+    await vmService.stop(req.vm, { user: req.user, force: !!req.body.force });
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 router.post('/vms/:id/restart', loadVm, async (req, res) => {
   try { await vmService.restart(req.vm, req.user); res.json({ ok: true }); }
@@ -157,19 +191,19 @@ router.post('/vms/:id/bootlog/clear', loadVm, (req, res) => {
   bootLogService.clearBootLogs(req.vm);
   res.json({ ok: true });
 });
-router.delete('/vms/:id', loadVm, (req, res) => {
+router.delete('/vms/:id', loadVm, async (req, res) => {
   try {
     if (req.vm.owner_id !== req.user.id && req.user.role !== 'admin' && !req.user.root_admin) return res.status(403).json({ error: 'Forbidden' });
-    vmService.remove(req.vm, req.user);
+    await vmService.remove(req.vm, req.user);
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
-router.patch('/vms/:id', loadVm, json, (req, res) => {
-  try { res.json({ ok: true, vm: vmService.update(req.vm, req.body, req.user) }); }
+router.patch('/vms/:id', loadVm, json, async (req, res) => {
+  try { res.json({ ok: true, vm: await vmService.update(req.vm, req.body, req.user) }); }
   catch (e) { res.status(500).json({ error: e.message }); }
 });
-router.post('/vms/:id/resize', loadVm, json, (req, res) => {
-  try { res.json({ ok: true, vm: vmService.resizeDisk(req.vm, req.body.disk_size, req.user) }); }
+router.post('/vms/:id/resize', loadVm, json, async (req, res) => {
+  try { res.json({ ok: true, vm: await vmService.resizeDisk(req.vm, req.body.disk_size, req.user) }); }
   catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -229,89 +263,199 @@ router.get('/vms/:id/files/download', loadVm, async (req, res) => {
 });
 
 // ---------- Backups / Schedules / Subusers ----------
-router.get('/vms/:id/backups', loadVm, (req, res) => res.json({ backups: backupService.listForVm(req.vm.id) }));
-router.post('/vms/:id/backups', loadVm, json, (req, res) => {
-  try { res.json({ ok: true, backup: backupService.createBackup(req.vm, { user: req.user, name: req.body.name }) }); }
-  catch (e) { res.status(500).json({ error: e.message }); }
-});
-router.post('/vms/:id/backups/:bid/restore', loadVm, (req, res) => {
-  const b = db.prepare('SELECT * FROM backups WHERE id = ? AND vm_id = ?').get(req.params.bid, req.vm.id);
-  if (!b) return res.status(404).json({ error: 'Backup not found' });
-  try { backupService.restoreBackup(b, { user: req.user }); res.json({ ok: true }); }
-  catch (e) { res.status(500).json({ error: e.message }); }
-});
-router.delete('/vms/:id/backups/:bid', loadVm, (req, res) => {
-  const b = db.prepare('SELECT * FROM backups WHERE id = ? AND vm_id = ?').get(req.params.bid, req.vm.id);
-  if (!b) return res.status(404).json({ error: 'Backup not found' });
-  backupService.deleteBackup(b, { user: req.user });
-  res.json({ ok: true });
-});
-
-router.get('/vms/:id/schedules', loadVm, (req, res) => {
-  res.json({ schedules: db.prepare('SELECT * FROM schedules WHERE vm_id = ?').all(req.vm.id) });
-});
-router.post('/vms/:id/schedules', loadVm, json, (req, res) => {
-  try { res.json({ ok: true, schedule: scheduleService.add({ ...req.body, vm_id: req.vm.id }, req.user) }); }
-  catch (e) { res.status(500).json({ error: e.message }); }
-});
-router.delete('/vms/:id/schedules/:sid', loadVm, (req, res) => {
-  try { scheduleService.remove(req.params.sid, req.user); res.json({ ok: true }); }
-  catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-router.get('/vms/:id/subusers', loadVm, (req, res) => {
-  res.json({ subusers: db.prepare('SELECT s.*, u.username, u.email FROM subusers s JOIN users u ON u.id = s.user_id WHERE s.vm_id = ?').all(req.vm.id) });
-});
-router.post('/vms/:id/subusers', loadVm, json, (req, res) => {
+router.get('/vms/:id/backups', loadVm, async (req, res, next) => {
   try {
-    const exists = db.prepare('SELECT id FROM subusers WHERE vm_id = ? AND user_id = ?').get(req.vm.id, req.body.user_id);
-    if (exists) return res.status(400).json({ error: 'Already exists' });
-    const info = db.prepare('INSERT INTO subusers (vm_id, user_id, permissions, created_at) VALUES (?,?,?,?)')
-      .run(req.vm.id, req.body.user_id, JSON.stringify(req.body.permissions || ['*']), new Date().toISOString());
-    res.json({ ok: true, id: Number(info.lastInsertRowid) });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-router.delete('/vms/:id/subusers/:sid', loadVm, (req, res) => {
-  db.prepare('DELETE FROM subusers WHERE id = ? AND vm_id = ?').run(req.params.sid, req.vm.id);
-  res.json({ ok: true });
+    res.json({ backups: await backupService.listForVm(req.vm.id) });
+  } catch (err) {
+    next(err);
+  }
 });
 
-router.get('/vms/:id/activity', loadVm, (req, res) => {
-  res.json({ logs: activity.listActivity({ vm_id: req.vm.id, limit: 200 }) });
+router.post('/vms/:id/backups', loadVm, json, async (req, res) => {
+  try {
+    const backup = await backupService.createBackup(req.vm, { user: req.user, name: req.body.name });
+    res.json({ ok: true, backup });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+router.post('/vms/:id/backups/:bid/restore', loadVm, async (req, res) => {
+  try {
+    const b = await collections.backups.findOne({ id: Number(req.params.bid), vm_id: Number(req.vm.id) });
+    if (!b) return res.status(404).json({ error: 'Backup not found' });
+    await backupService.restoreBackup(b, { user: req.user });
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+router.delete('/vms/:id/backups/:bid', loadVm, async (req, res) => {
+  try {
+    const b = await collections.backups.findOne({ id: Number(req.params.bid), vm_id: Number(req.vm.id) });
+    if (!b) return res.status(404).json({ error: 'Backup not found' });
+    await backupService.deleteBackup(b, { user: req.user });
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+router.get('/vms/:id/schedules', loadVm, async (req, res, next) => {
+  try {
+    const schedules = await collections.schedules.find({ vm_id: Number(req.vm.id) }).toArray();
+    res.json({ schedules });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/vms/:id/schedules', loadVm, json, async (req, res) => {
+  try {
+    const schedule = await scheduleService.add({ ...req.body, vm_id: req.vm.id }, req.user);
+    res.json({ ok: true, schedule });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+router.delete('/vms/:id/schedules/:sid', loadVm, async (req, res) => {
+  try {
+    await scheduleService.remove(req.params.sid, req.user);
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+router.get('/vms/:id/subusers', loadVm, async (req, res, next) => {
+  try {
+    const subsRaw = await collections.subusers.find({ vm_id: Number(req.vm.id) }).toArray();
+    const userIds = subsRaw.map(s => Number(s.user_id));
+    const users = userIds.length ? await collections.users.find({ id: { $in: userIds } }).toArray() : [];
+    const userMap = new Map(users.map(u => [u.id, u]));
+    const subusers = subsRaw.map(s => ({
+      ...s,
+      username: userMap.get(s.user_id)?.username || '',
+      email: userMap.get(s.user_id)?.email || '',
+    }));
+    res.json({ subusers });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/vms/:id/subusers', loadVm, json, async (req, res) => {
+  try {
+    const exists = await collections.subusers.findOne({ vm_id: Number(req.vm.id), user_id: Number(req.body.user_id) });
+    if (exists) return res.status(400).json({ error: 'Already exists' });
+    const nextId = await getNextId('subusers');
+    await collections.subusers.insertOne({
+      id: nextId,
+      vm_id: Number(req.vm.id),
+      user_id: Number(req.body.user_id),
+      permissions: JSON.stringify(req.body.permissions || ['*']),
+      created_at: new Date().toISOString(),
+    });
+    res.json({ ok: true, id: nextId });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+router.delete('/vms/:id/subusers/:sid', loadVm, async (req, res) => {
+  try {
+    await collections.subusers.deleteOne({ id: Number(req.params.sid), vm_id: Number(req.vm.id) });
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+router.get('/vms/:id/activity', loadVm, async (req, res, next) => {
+  try {
+    res.json({ logs: await activity.listActivity({ vm_id: req.vm.id, limit: 200 }) });
+  } catch (err) {
+    next(err);
+  }
 });
 
 // ---------- Admin API ----------
-router.get('/admin/vms', apiAdmin, (req, res) => res.json({ vms: vmService.dbVms().map(vmService.serializeVm) }));
-router.get('/admin/users', apiAdmin, (req, res) => {
-  res.json({ users: db.prepare('SELECT * FROM users ORDER BY id DESC').all().map(authService.publicUser) });
+router.get('/admin/vms', apiAdmin, async (req, res, next) => {
+  try {
+    res.json({ vms: (await vmService.dbVms()).map(vmService.serializeVm) });
+  } catch (err) {
+    next(err);
+  }
 });
-router.post('/admin/users', apiAdmin, json, (req, res) => {
-  try { res.json({ ok: true, user: authService.publicUser(authService.createUser(req.body)) }); }
-  catch (e) { res.status(500).json({ error: e.message }); }
+
+router.get('/admin/users', apiAdmin, async (req, res, next) => {
+  try {
+    const users = await collections.users.find().sort({ id: -1 }).toArray();
+    res.json({ users: users.map(authService.publicUser) });
+  } catch (err) {
+    next(err);
+  }
 });
-router.patch('/admin/users/:id', apiAdmin, json, (req, res) => {
-  try { res.json({ ok: true, user: authService.publicUser(authService.updateUser(req.params.id, req.body)) }); }
-  catch (e) { res.status(500).json({ error: e.message }); }
+
+router.post('/admin/users', apiAdmin, json, async (req, res) => {
+  try {
+    const user = await authService.createUser(req.body);
+    res.json({ ok: true, user: authService.publicUser(user) });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
-router.delete('/admin/users/:id', apiAdmin, (req, res) => {
-  try { authService.deleteUser(req.params.id); res.json({ ok: true }); }
-  catch (e) { res.status(500).json({ error: e.message }); }
+
+router.patch('/admin/users/:id', apiAdmin, json, async (req, res) => {
+  try {
+    const user = await authService.updateUser(req.params.id, req.body);
+    res.json({ ok: true, user: authService.publicUser(user) });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
-router.get('/admin/activity', apiAdmin, (req, res) => res.json({ logs: activity.listActivity({ limit: 500 }) }));
+
+router.delete('/admin/users/:id', apiAdmin, async (req, res) => {
+  try {
+    await authService.deleteUser(req.params.id);
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+router.get('/admin/activity', apiAdmin, async (req, res, next) => {
+  try {
+    res.json({ logs: await activity.listActivity({ limit: 500 }) });
+  } catch (err) {
+    next(err);
+  }
+});
+
 router.get('/admin/settings', apiAdmin, (req, res) => res.json({ settings: settings.all() }));
+
 router.put('/admin/settings', apiAdmin, json, (req, res) => {
   for (const [k, v] of Object.entries(req.body || {})) settings.set(k, v);
   res.json({ ok: true, settings: settings.all() });
 });
-router.get('/admin/stats', apiAdmin, (req, res) => {
-  const vms = vmService.dbVms();
-  res.json({
-    users: db.prepare('SELECT COUNT(*) c FROM users').get().c,
-    vms: vms.length,
-    running: vms.filter((v) => vmService.isRunning(v)).length,
-    backups: db.prepare('SELECT COUNT(*) c FROM backups').get().c,
-    disk_usage: vmService.totalDiskUsage(),
-  });
+
+router.get('/admin/stats', apiAdmin, async (req, res, next) => {
+  try {
+    const userCount = await collections.users.countDocuments();
+    const vms = await vmService.dbVms();
+    const backupCount = await collections.backups.countDocuments();
+    res.json({
+      users: userCount,
+      vms: vms.length,
+      running: vms.filter((v) => vmService.isRunning(v)).length,
+      backups: backupCount,
+      disk_usage: vmService.totalDiskUsage(),
+    });
+  } catch (err) {
+    next(err);
+  }
 });
 
 // ---------- Wallpapers & Customization API ----------
@@ -369,10 +513,10 @@ router.post('/customization/save', json, (req, res) => {
   }
 });
 
-router.get('/admin/nodes/status', (req, res) => {
+router.get('/admin/nodes/status', async (req, res) => {
   try {
     const nodeService = require('../services/nodeService');
-    res.json({ ok: true, stats: nodeService.getNodeLiveStats() });
+    res.json({ ok: true, stats: await nodeService.getNodeLiveStats() });
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message });
   }

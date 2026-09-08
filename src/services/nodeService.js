@@ -2,7 +2,7 @@ const os = require('os');
 const fs = require('fs');
 const { execSync } = require('child_process');
 const config = require('../lib/config');
-const { db } = require('../lib/db');
+const { collections } = require('../lib/db');
 const vmService = require('./vmService');
 
 let lastCpuTimes = null;
@@ -124,7 +124,7 @@ function pushHistoryPoint(cpuPct, memPct, rxKbps, txKbps) {
   }
 }
 
-function getNodeLiveStats() {
+async function getNodeLiveStats() {
   const cpus = os.cpus();
   const totalMem = os.totalmem();
   const freeMem = os.freemem();
@@ -169,7 +169,8 @@ function getNodeLiveStats() {
 
   pushHistoryPoint(cpuStats.overall, memPct, netStats.rx_kbps, netStats.tx_kbps);
 
-  const allVms = db.prepare('SELECT * FROM vms').all().map(vmService.serializeVm);
+  const rawVms = await collections.vms.find().toArray();
+  const allVms = rawVms.map(vmService.serializeVm);
   const runningVms = allVms.filter((v) => vmService.isRunning(v));
 
   let totalAllocatedMem = 0;

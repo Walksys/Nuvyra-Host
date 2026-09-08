@@ -8,7 +8,7 @@
  */
 const readline = require('readline');
 const config = require('../src/lib/config');
-const { db } = require('../src/lib/db');
+const { initDb, closeDb, collections } = require('../src/lib/db');
 const authService = require('../src/services/authService');
 const logger = require('../src/lib/logger');
 
@@ -21,6 +21,7 @@ function ask(q, def) {
 }
 
 async function main() {
+  await initDb();
   const args = {};
   for (let i = 2; i < process.argv.length; i++) {
     const a = process.argv[i];
@@ -38,11 +39,11 @@ async function main() {
   const role = args.role || 'admin';
   const name = args.name || username;
 
-  const existing = authService.findByUsername(username);
+  const existing = await authService.findByUsername(username);
   if (existing) {
     const ans = await ask('User already exists. Update password and promote to admin? (y/N)', 'n');
     if (ans.toLowerCase() === 'y') {
-      authService.updateUser(existing.id, { password, role, root_admin: 1 });
+      await authService.updateUser(existing.id, { password, role, root_admin: 1 });
       logger.info(`[createuser] Updated ${username} (admin)`);
       return;
     }
@@ -51,9 +52,9 @@ async function main() {
   }
 
   try {
-    const user = authService.createUser({ username, email, password, name, role, verified: true });
+    const user = await authService.createUser({ username, email, password, name, role, verified: true });
     if (role === 'admin') {
-      db.prepare('UPDATE users SET root_admin = 1 WHERE id = ?').run(user.id);
+      await collections.users.updateOne({ id: user.id }, { $set: { root_admin: 1 } });
     }
     logger.info(`[createuser] Created ${role} user: ${username} <${email}>`);
   } catch (e) {
@@ -62,4 +63,7 @@ async function main() {
   }
 }
 
-main().finally(() => rl.close());
+main().finally(async () => {
+  await closeDb();
+  rl.close();
+});

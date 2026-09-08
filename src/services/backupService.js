@@ -1,7 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
-const { db, settings } = require('../lib/db');
+const { collections, getNextId } = require('../lib/db');
 const config = require('../lib/config');
 const logger = require('../lib/logger');
 const vmService = require('./vmService');
@@ -10,19 +10,21 @@ const { logActivity } = require('./activityService');
 const BACKUP_DIR = config.uploads.backup;
 fs.mkdirSync(BACKUP_DIR, { recursive: true });
 
-function listForVm(vmId) {
-  return db.prepare('SELECT * FROM backups WHERE vm_id = ? ORDER BY id DESC').all(vmId);
+async function listForVm(vmId) {
+  return collections.backups.find({ vm_id: Number(vmId) }).sort({ id: -1 }).toArray();
 }
 
-function listAll() {
-  return db.prepare(
-    `SELECT b.*, v.name AS vm_name FROM backups b JOIN vms v ON v.id = b.vm_id ORDER BY b.id DESC`
-  ).all();
+async function listAll() {
+  const backups = await collections.backups.find().sort({ id: -1 }).toArray();
+  if (!backups.length) return [];
+  const vmIds = [...new Set(backups.map((b) => b.vm_id))];
+  const vms = await collections.vms.find({ id: { $in: vmIds } }).toArray();
+  const vmMap = new Map(vms.map((v) => [v.id, v.name]));
+  return backups.map((b) => ({ ...b, vm_name: vmMap.get(b.vm_id) || 'Unknown' }));
 }
 
-function createBackup(vm, { user = null, name = null, kind = 'full' } = {}) {
+async function createBackup(vm, { user = null, name = null, kind = 'full' } = {}) {
   if (vmService.isRunning(vm)) {
-    // snapshot via qemu-img works on live (qcow2) too
     logger.info('[backup] VM is running; taking qemu snapshot');
   }
   const label = name || `backup-${new Date().toISOString().replace(/[:.]/g, '-')}`;
@@ -32,44 +34,51 @@ function createBackup(vm, { user = null, name = null, kind = 'full' } = {}) {
   const r = spawnSync('qemu-img', ['convert', '-U', '-O', 'qcow2', vm.img_file, dest], { encoding: 'utf8' });
   if (r.status !== 0) throw new Error(r.stderr || 'Backup conversion failed');
   const size = fs.statSync(dest).size;
-  const info = db.prepare(
-    'INSERT INTO backups (vm_id, name, file, size, kind, created_at) VALUES (?,?,?,?,?,?)'
-  ).run(vm.id, label, dest, size, kind, new Date().toISOString());
-  logActivity({ user_id: user ? user.id : null, vm_id: vm.id, event: 'backup:create', details: { name: label } });
-  return db.prepare('SELECT * FROM backups WHERE id = ?').get(Number(info.lastInsertRowid));
+  const id = await getNextId('backups');
+  const doc = {
+    id,
+    vm_id: Number(vm.id),
+    name: label,
+    file: dest,
+    size,
+    kind,
+    created_at: new Date().toISOString(),
+  };
+  await collections.backups.insertOne(doc);
+  await logActivity({ user_id: user ? user.id : null, vm_id: vm.id, event: 'backup:create', details: { name: label } });
+  return doc;
 }
 
-function restoreBackup(backup, { user = null } = {}) {
-  const vm = vmService.getVm(backup.vm_id);
+async function restoreBackup(backup, { user = null } = {}) {
+  const vm = await vmService.getVm(backup.vm_id);
   if (!vm) throw new Error('VM not found');
   if (vmService.isRunning(vm)) {
-    vmService.stop(vm, { user, force: true });
+    await vmService.stop(vm, { user, force: true });
   }
   if (!fs.existsSync(backup.file)) throw new Error('Backup file missing');
   const tmp = vm.img_file + '.restore';
   fs.copyFileSync(backup.file, tmp);
   fs.renameSync(tmp, vm.img_file);
-  db.prepare('UPDATE vms SET updated_at = ? WHERE id = ?').run(new Date().toISOString(), vm.id);
-  logActivity({ user_id: user ? user.id : null, vm_id: vm.id, event: 'backup:restore', details: { name: backup.name } });
+  await collections.vms.updateOne({ id: Number(vm.id) }, { $set: { updated_at: new Date().toISOString() } });
+  await logActivity({ user_id: user ? user.id : null, vm_id: vm.id, event: 'backup:restore', details: { name: backup.name } });
   return true;
 }
 
-function deleteBackup(backup, { user = null } = {}) {
+async function deleteBackup(backup, { user = null } = {}) {
   try { fs.unlinkSync(backup.file); } catch (_) {}
   try {
     fs.rmdirSync(path.dirname(backup.file));
   } catch (_) {}
-  db.prepare('DELETE FROM backups WHERE id = ?').run(backup.id);
-  logActivity({ user_id: user ? user.id : null, vm_id: backup.vm_id, event: 'backup:delete', details: { name: backup.name } });
+  await collections.backups.deleteOne({ id: Number(backup.id) });
+  await logActivity({ user_id: user ? user.id : null, vm_id: backup.vm_id, event: 'backup:delete', details: { name: backup.name } });
   return true;
 }
 
-function pruneBackups(vmId, keep = 5) {
-  const rows = db.prepare('SELECT id FROM backups WHERE vm_id = ? ORDER BY id DESC').all(vmId);
+async function pruneBackups(vmId, keep = 5) {
+  const rows = await collections.backups.find({ vm_id: Number(vmId) }).sort({ id: -1 }).toArray();
   if (rows.length <= keep) return;
-  for (const row of rows.slice(keep)) {
-    const b = db.prepare('SELECT * FROM backups WHERE id = ?').get(row.id);
-    deleteBackup(b);
+  for (const b of rows.slice(keep)) {
+    await deleteBackup(b);
   }
 }
 

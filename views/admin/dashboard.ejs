@@ -14,6 +14,33 @@
     </a>
   </div>
 
+  <% if (settings && settings['update.available'] === '1') { %>
+    <div class="card mb-4" style="background:linear-gradient(90deg, rgba(245,158,11,0.12), rgba(217,119,6,0.18));border:1px solid rgba(245,158,11,0.4);border-radius:12px;padding:16px 20px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:14px;box-shadow:0 4px 20px rgba(245,158,11,0.15)">
+      <div style="display:flex;align-items:center;gap:14px">
+        <div style="width:42px;height:42px;border-radius:10px;background:linear-gradient(135deg,#f59e0b,#d97706);display:flex;align-items:center;justify-content:center;color:#fff;font-size:20px;box-shadow:0 0 16px rgba(245,158,11,0.4)">
+          🚀
+        </div>
+        <div>
+          <div style="font-weight:800;font-size:15px;color:#fff;display:flex;align-items:center;gap:8px">
+            New Update Available: vPanel Pro <%= settings['update.latest_version'] || 'Update' %>
+            <span class="pill font-bold" style="background:#f59e0b;color:#1e1002;font-size:10px;padding:2px 7px">NEW RELEASE</span>
+          </div>
+          <div class="muted text-sm" style="margin-top:2px">
+            A new version is ready for deployment. Includes new features, security patches, and performance optimizations.
+          </div>
+        </div>
+      </div>
+      <div class="flex" style="gap:8px">
+        <a href="/admin/updates" class="btn btn-sm" style="background:rgba(255,255,255,0.08);border:1px solid var(--border);color:#fff">
+          View Changelog
+        </a>
+        <a href="/admin/updates" class="btn btn-sm btn-primary" style="background:linear-gradient(135deg,#f59e0b,#d97706);border:none;font-weight:700">
+          Update Now
+        </a>
+      </div>
+    </div>
+  <% } %>
+
   <!-- Admin Stats Grid -->
   <div class="grid grid-4 mb-4">
     <div class="stat">

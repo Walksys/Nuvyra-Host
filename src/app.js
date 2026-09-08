@@ -6,7 +6,7 @@ const fs = require('fs');
 const { Server } = require('socket.io');
 const config = require('./lib/config');
 const logger = require('./lib/logger');
-const { settings } = require('./lib/db');
+const { initDb, collections, settings } = require('./lib/db');
 const { getUserFromReq } = require('./middleware/auth');
 const vmService = require('./services/vmService');
 const sshService = require('./services/sshService');
@@ -25,6 +25,8 @@ function createWebApp() {
   app.use(express.urlencoded({ extended: true }));
   app.use(express.json({ limit: '50mb' }));
   app.use(cookieParser());
+  const { i18nMiddleware } = require('./lib/i18n');
+  app.use(i18nMiddleware);
   app.use((req, res, next) => {
     res.locals.settings = settings.all();
     res.locals.user = null;
@@ -38,11 +40,17 @@ function createWebApp() {
   const { optionalAuth } = require('./middleware/auth');
   app.use(optionalAuth);
 
+  app.post('/api/locale', express.json(), (req, res) => {
+    const lang = String(req.body.lang || req.body.locale || 'en').toLowerCase();
+    res.cookie('vpanel_lang', lang, { maxAge: 31536000000, path: '/' });
+    res.json({ ok: true, lang });
+  });
+
   app.get('/', (req, res) => res.redirect(req.user ? '/dashboard' : '/login'));
+  app.use('/api', require('./routes/api'));
   app.use('/', require('./routes/webAuth'));
   app.use('/', require('./routes/webUser'));
   app.use('/', require('./routes/webAdmin'));
-  app.use('/api', require('./routes/api'));
 
   app.use((req, res) => {
     if (req.path.startsWith('/api/')) return res.status(404).json({ error: 'Not found' });
@@ -80,12 +88,12 @@ function createApiApp() {
 }
 
 function attachConsoleSocket(io) {
-  io.use((socket, next) => {
+  io.use(async (socket, next) => {
     try {
       const token = socket.handshake.auth?.token || socket.handshake.headers?.cookie?.split(';').find((c) => c.trim().startsWith('token='))?.split('=')[1];
       const user = token ? authService.verifyToken(token) : null;
       if (!user) return next(new Error('Not authenticated'));
-      socket.data.user = authService.findById(Number(user.sub));
+      socket.data.user = await authService.findById(Number(user.sub));
       if (!socket.data.user || socket.data.user.suspended) return next(new Error('Not authenticated'));
       next();
     } catch (e) {
@@ -94,7 +102,7 @@ function attachConsoleSocket(io) {
   });
 
   io.on('connection', (socket) => {
-    socket.on('console:join', ({ vmId }) => {
+    socket.on('console:join', async ({ vmId }) => {
       // Cancel previous pending join
       socket.data.isLeaving = false;
 
@@ -108,8 +116,8 @@ function attachConsoleSocket(io) {
         socket.data.conn = null;
       }
 
-      const vm = vmService.getVm(parseInt(vmId, 10));
-      if (!vm || !vmService.canAccess(socket.data.user, vm, 'console')) {
+      const vm = await vmService.getVm(parseInt(vmId, 10));
+      if (!vm || !(await vmService.canAccess(socket.data.user, vm, 'console'))) {
         socket.emit('console:error', 'Access denied or server not found');
         return;
       }
@@ -177,9 +185,9 @@ function attachConsoleSocket(io) {
       if (socket.data.stream) socket.data.stream.setWindow(rows, cols);
     });
 
-    socket.on('bootlog:join', ({ vmId }) => {
-      const vm = vmService.getVm(parseInt(vmId, 10));
-      if (!vm || !vmService.canAccess(socket.data.user, vm, 'console')) {
+    socket.on('bootlog:join', async ({ vmId }) => {
+      const vm = await vmService.getVm(parseInt(vmId, 10));
+      if (!vm || !(await vmService.canAccess(socket.data.user, vm, 'console'))) {
         socket.emit('bootlog:error', 'Access denied or server not found');
         return;
       }
@@ -213,9 +221,9 @@ function attachConsoleSocket(io) {
       }
     });
 
-    socket.on('bootlog:clear', ({ vmId }) => {
-      const vm = vmService.getVm(parseInt(vmId, 10));
-      if (!vm || !vmService.canAccess(socket.data.user, vm, 'console')) {
+    socket.on('bootlog:clear', async ({ vmId }) => {
+      const vm = await vmService.getVm(parseInt(vmId, 10));
+      if (!vm || !(await vmService.canAccess(socket.data.user, vm, 'console'))) {
         socket.emit('bootlog:error', 'Access denied or server not found');
         return;
       }
@@ -234,7 +242,7 @@ function attachConsoleSocket(io) {
   });
 }
 
-function bootstrap() {
+async function bootstrap() {
   for (const d of [
     config.vmDir,
     config.uploads.dir, config.uploads.logo, config.uploads.favicon,
@@ -245,7 +253,12 @@ function bootstrap() {
     fs.mkdirSync(d, { recursive: true });
   }
 
-  scheduleService.loadAll();
+  await initDb();
+  const pluginManager = require('./lib/pluginManager');
+  await pluginManager.init();
+  const updateService = require('./services/updateService');
+  updateService.initBackgroundChecker();
+  await scheduleService.loadAll();
 
   const webApp = createWebApp();
   const apiApp = createApiApp();
@@ -262,13 +275,12 @@ function bootstrap() {
 
   // Auto-seed admin if none exists
   try {
-    if (authService.countAdmins() === 0) {
+    if ((await authService.countAdmins()) === 0) {
       const username = process.env.ADMIN_USERNAME || 'admin';
       const email = process.env.ADMIN_EMAIL || 'admin@vpanel.local';
       const password = process.env.ADMIN_PASSWORD || 'admin12345';
-      const user = authService.createUser({ username, email, password, name: 'Administrator', role: 'admin', verified: true });
-      const { db } = require('./lib/db');
-      db.prepare('UPDATE users SET root_admin = 1 WHERE id = ?').run(user.id);
+      const user = await authService.createUser({ username, email, password, name: 'Administrator', role: 'admin', verified: true });
+      await collections.users.updateOne({ id: user.id }, { $set: { root_admin: 1 } });
       logger.info(`[panel] auto-seeded initial admin: ${username} (${email})`);
     }
   } catch (e) {

@@ -6,7 +6,7 @@ const { spawn, execSync, spawnSync } = require('child_process');
 const crypto = require('crypto');
 const { v4: uuidv4 } = require('uuid');
 const config = require('../lib/config');
-const { db, settings } = require('../lib/db');
+const { collections, getNextId, settings } = require('../lib/db');
 const logger = require('../lib/logger');
 const { logActivity } = require('./activityService');
 
@@ -53,37 +53,34 @@ function inUsePort(port) {
   }
 }
 
-function allocPort() {
+async function allocPort() {
   const min = parseInt(settings.get('vm.auto_port_min') || config.autoPortMin, 10);
   const max = parseInt(settings.get('vm.auto_port_max') || config.autoPortMax, 10);
-  const used = new Set(
-    db.prepare('SELECT ssh_port FROM vms').all().map((r) => r.ssh_port)
-  );
+  const vms = await collections.vms.find({}, { projection: { ssh_port: 1 } }).toArray();
+  const used = new Set(vms.map((r) => r.ssh_port));
   for (let p = min; p <= max; p++) {
     if (!used.has(p) && !inUsePort(p)) return p;
   }
   throw new Error(`No free port in range ${min}-${max}. All ports in use.`);
 }
 
-function allocVncPort() {
+async function allocVncPort() {
   const min = parseInt(settings.get('vm.vnc_port_min') || config.autoVncPortMin, 10);
   const max = parseInt(settings.get('vm.vnc_port_max') || config.autoVncPortMax, 10);
   if (min <= 5900) throw new Error('VNC port range must start above 5900');
-  const used = new Set(
-    db.prepare('SELECT vnc_port FROM vms').all().map((r) => r.vnc_port)
-  );
+  const vms = await collections.vms.find({}, { projection: { vnc_port: 1 } }).toArray();
+  const used = new Set(vms.map((r) => r.vnc_port));
   for (let p = min; p <= max; p++) {
     if (!used.has(p) && !inUsePort(p)) return p;
   }
   throw new Error(`No free VNC port in range ${min}-${max}. All ports in use.`);
 }
 
-function allocAgentPort() {
+async function allocAgentPort() {
   const min = parseInt(settings.get('vm.agent_port_min') || config.autoAgentPortMin, 10);
   const max = parseInt(settings.get('vm.agent_port_max') || config.autoAgentPortMax, 10);
-  const used = new Set(
-    db.prepare('SELECT agent_port FROM vms').all().map((r) => r.agent_port)
-  );
+  const vms = await collections.vms.find({}, { projection: { agent_port: 1 } }).toArray();
+  const used = new Set(vms.map((r) => r.agent_port));
   for (let p = min; p <= max; p++) {
     if (!used.has(p) && !inUsePort(p)) return p;
   }
@@ -94,22 +91,22 @@ function genAgentToken() {
   return crypto.randomBytes(24).toString('hex');
 }
 
-function ensureAgentPort(vm) {
+async function ensureAgentPort(vm) {
   if (!vm.agent_port) {
-    vm.agent_port = allocAgentPort();
-    db.prepare('UPDATE vms SET agent_port = ?, updated_at = ? WHERE id = ?').run(vm.agent_port, now(), vm.id);
+    vm.agent_port = await allocAgentPort();
+    await collections.vms.updateOne({ id: Number(vm.id) }, { $set: { agent_port: vm.agent_port, updated_at: now() } });
   }
   if (!vm.agent_token) {
     vm.agent_token = genAgentToken();
-    db.prepare('UPDATE vms SET agent_token = ?, updated_at = ? WHERE id = ?').run(vm.agent_token, now(), vm.id);
+    await collections.vms.updateOne({ id: Number(vm.id) }, { $set: { agent_token: vm.agent_token, updated_at: now() } });
   }
   return vm;
 }
 
-function ensureVncPort(vm) {
+async function ensureVncPort(vm) {
   if (vm.vnc_port) return vm.vnc_port;
-  const port = allocVncPort();
-  db.prepare('UPDATE vms SET vnc_port = ?, updated_at = ? WHERE id = ?').run(port, now(), vm.id);
+  const port = await allocVncPort();
+  await collections.vms.updateOne({ id: Number(vm.id) }, { $set: { vnc_port: port, updated_at: now() } });
   vm.vnc_port = port;
   return port;
 }
@@ -237,11 +234,20 @@ function statusOf(vm) {
   return isRunning(vm) ? 'running' : 'stopped';
 }
 
-function dbVms() {
-  return db.prepare(
-    `SELECT v.*, u.username AS owner_name, u.email AS owner_email
-     FROM vms v JOIN users u ON u.id = v.owner_id`
-  ).all();
+async function dbVms() {
+  const vms = await collections.vms.find().toArray();
+  if (!vms.length) return [];
+  const userIds = [...new Set(vms.map((v) => v.owner_id))];
+  const users = await collections.users.find({ id: { $in: userIds } }).toArray();
+  const userMap = new Map(users.map((u) => [u.id, u]));
+  return vms.map((v) => {
+    const u = userMap.get(v.owner_id);
+    return {
+      ...v,
+      owner_name: u ? u.username : 'Unknown',
+      owner_email: u ? u.email : '',
+    };
+  });
 }
 
 function serializeVm(row) {
@@ -260,28 +266,29 @@ function serializeVm(row) {
   return out;
 }
 
-function getVm(id) {
-  const row = db.prepare('SELECT * FROM vms WHERE id = ?').get(id);
+async function getVm(id) {
+  if (!id) return null;
+  const row = await collections.vms.findOne({ id: Number(id) });
   return serializeVm(row);
 }
 
-function canAccess(user, vm, perm = null) {
-  if (!vm) return false;
+async function canAccess(user, vm, perm = null) {
+  if (!vm || !user) return false;
   if (user.role === 'admin' || user.root_admin) return true;
   if (vm.owner_id === user.id) return true;
-  const sub = db.prepare(
-    'SELECT * FROM subusers WHERE vm_id = ? AND user_id = ?'
-  ).get(vm.id, user.id);
+  const sub = await collections.subusers.findOne({ vm_id: Number(vm.id), user_id: Number(user.id) });
   if (!sub) return false;
   if (!perm) return true;
   let perms = [];
-  try { perms = JSON.parse(sub.permissions || '[]'); } catch (_) {}
+  try { perms = typeof sub.permissions === 'string' ? JSON.parse(sub.permissions) : (sub.permissions || []); } catch (_) {}
   return perms.includes(perm) || perms.includes('*');
 }
 
-function setDbStatus(id, status) {
-  db.prepare('UPDATE vms SET status = ?, updated_at = ? WHERE id = ?')
-    .run(status, new Date().toISOString(), id);
+async function setDbStatus(id, status) {
+  await collections.vms.updateOne(
+    { id: Number(id) },
+    { $set: { status, updated_at: new Date().toISOString() } }
+  );
 }
 
 function now() {
@@ -387,7 +394,7 @@ async function create({ user, data }) {
   if (!vmName || !/^[a-zA-Z0-9_-]+$/.test(vmName)) {
     throw new Error('VM name can only contain letters, numbers, hyphens, underscores');
   }
-  const exists = db.prepare('SELECT id FROM vms WHERE name = ? AND owner_id = ?').get(vmName, user.id);
+  const exists = await collections.vms.findOne({ name: vmName, owner_id: user.id });
   if (exists) throw new Error(`VM "${vmName}" already exists`);
 
   const hostname = String(data.hostname || vmName).replace(/\s+/g, '-');
@@ -396,16 +403,21 @@ async function create({ user, data }) {
   const diskSize = String(data.disk_size || settings.get('vm.default_disk') || '20G').toUpperCase();
   const memory = parseInt(data.memory || settings.get('vm.default_memory') || '2048', 10);
   const cpus = parseInt(data.cpus || settings.get('vm.default_cpus') || '2', 10);
-  const sshPort = data.ssh_port ? parseInt(data.ssh_port, 10) : allocPort();
+  const sshPort = data.ssh_port ? parseInt(data.ssh_port, 10) : await allocPort();
   if (isNaN(sshPort) || sshPort < 23 || sshPort > 65535) throw new Error('Invalid SSH port');
   if (inUsePort(sshPort)) throw new Error(`Port ${sshPort} is already in use`);
-  const vncPort = allocVncPort();
-  const agentPort = allocAgentPort();
+  const vncPort = await allocVncPort();
+  const agentPort = await allocAgentPort();
   const agentToken = genAgentToken();
   const guiMode = data.gui_mode === true || data.gui_mode === '1' || data.gui_mode === 'true';
   const forwards = Array.isArray(data.port_forwards) ? data.port_forwards : [];
 
+  const id = await getNextId('vms');
+  const dir = path.join(VM_DIR, String(id));
+  fs.mkdirSync(dir, { recursive: true });
+
   const vm = {
+    id,
     uuid: uuidv4(),
     owner_id: user.id,
     name: vmName,
@@ -424,27 +436,17 @@ async function create({ user, data }) {
     agent_token: agentToken,
     gui_mode: guiMode ? 1 : 0,
     port_forwards: JSON.stringify(forwards),
+    img_file: path.join(dir, 'disk.qcow2'),
+    seed_file: path.join(dir, 'seed.iso'),
     start_on_boot: data.start_on_boot ? 1 : 0,
     startup_command: data.startup_command || '',
     status: 'stopped',
     notes: data.notes || '',
+    created_at: now(),
+    updated_at: now(),
   };
 
-  const info = db.prepare(
-    `INSERT INTO vms (uuid, owner_id, name, os_type, codename, img_url, hostname, username, password,
-      disk_size, memory, cpus, ssh_port, vnc_port, agent_port, agent_token, gui_mode, port_forwards, start_on_boot, startup_command, status, notes, created_at, updated_at)
-     VALUES (@uuid, @owner_id, @name, @os_type, @codename, @img_url, @hostname, @username, @password,
-      @disk_size, @memory, @cpus, @ssh_port, @vnc_port, @agent_port, @agent_token, @gui_mode, @port_forwards, @start_on_boot, @startup_command, @status, @notes, @created, @created)`
-  ).run({ ...vm, created: now() });
-
-  const id = Number(info.lastInsertRowid);
-  const dir = path.join(VM_DIR, String(id));
-  fs.mkdirSync(dir, { recursive: true });
-  vm.id = id;
-  vm.img_file = path.join(dir, 'disk.qcow2');
-  vm.seed_file = path.join(dir, 'seed.iso');
-
-  db.prepare('UPDATE vms SET img_file = ?, seed_file = ? WHERE id = ?').run(vm.img_file, vm.seed_file, id);
+  await collections.vms.insertOne(vm);
 
   const img = vm.img_file;
   if (!fs.existsSync(img)) {
@@ -478,8 +480,8 @@ async function create({ user, data }) {
   }
 
   writeSeed(vm);
-  setDbStatus(id, 'stopped');
-  logActivity({ user_id: user.id, vm_id: id, event: 'vm:create', details: { name: vmName, port: sshPort } });
+  await setDbStatus(id, 'stopped');
+  await logActivity({ user_id: user.id, vm_id: id, event: 'vm:create', details: { name: vmName, port: sshPort } });
 
   return getVm(id);
 }
@@ -490,8 +492,8 @@ async function start(vm, { user = null } = {}) {
   if (!fs.existsSync(vm.seed_file)) {
     writeSeed(vm);
   }
-  ensureVncPort(vm);
-  ensureAgentPort(vm);
+  await ensureVncPort(vm);
+  await ensureAgentPort(vm);
   const dir = vmDir(vm);
   const bootLogPath = path.join(dir, 'boot.log');
   const sessionHeader = `\r\n=== [vPanel] Starting VM "${vm.name}" at ${new Date().toISOString()} ===\r\n\r\n`;
@@ -546,61 +548,58 @@ async function restart(vm, user) {
   return start(vm, { user });
 }
 
-function remove(vm, user) {
-  if (isRunning(vm)) stop(vm, { user, force: true });
+async function remove(vm, user) {
+  if (isRunning(vm)) await stop(vm, { user, force: true });
   try {
     fs.rmSync(vmDir(vm), { recursive: true, force: true });
   } catch (e) {
     logger.warn('[vm] cleanup error: ' + e.message);
   }
-  db.prepare('DELETE FROM backups WHERE vm_id = ?').run(vm.id);
-  db.prepare('DELETE FROM schedules WHERE vm_id = ?').run(vm.id);
-  db.prepare('DELETE FROM subusers WHERE vm_id = ?').run(vm.id);
-  db.prepare('DELETE FROM activity_logs WHERE vm_id = ?').run(vm.id);
-  db.prepare('DELETE FROM vms WHERE id = ?').run(vm.id);
-  logActivity({ user_id: user ? user.id : null, vm_id: vm.id, event: 'vm:delete', details: { name: vm.name } });
+  await collections.backups.deleteMany({ vm_id: Number(vm.id) });
+  await collections.schedules.deleteMany({ vm_id: Number(vm.id) });
+  await collections.subusers.deleteMany({ vm_id: Number(vm.id) });
+  await collections.activity_logs.deleteMany({ vm_id: Number(vm.id) });
+  await collections.vms.deleteOne({ id: Number(vm.id) });
+  await logActivity({ user_id: user ? user.id : null, vm_id: vm.id, event: 'vm:delete', details: { name: vm.name } });
   return { ok: true };
 }
 
-function update(vm, data, user) {
+async function update(vm, data, user) {
   const fields = ['name', 'hostname', 'username', 'password', 'memory', 'cpus', 'disk_size', 'gui_mode', 'port_forwards', 'start_on_boot', 'startup_command', 'notes', 'owner_id'];
-  const set = [];
-  const vals = {};
+  const $set = {};
   for (const f of fields) {
     if (data[f] !== undefined) {
-      set.push(`${f} = @${f}`);
-      if (f === 'port_forwards' && Array.isArray(data[f])) vals[f] = JSON.stringify(data[f]);
-      else if (f === 'gui_mode' || f === 'start_on_boot') vals[f] = data[f] ? 1 : 0;
-      else if (f === 'owner_id') vals[f] = parseInt(data[f], 10);
-      else vals[f] = data[f];
+      if (f === 'port_forwards' && Array.isArray(data[f])) $set[f] = JSON.stringify(data[f]);
+      else if (f === 'gui_mode' || f === 'start_on_boot') $set[f] = data[f] ? 1 : 0;
+      else if (f === 'owner_id') $set[f] = parseInt(data[f], 10);
+      else $set[f] = data[f];
     }
   }
-  if (set.length) {
-    set.push('updated_at = @updated_at');
-    vals.updated_at = now();
-    db.prepare(`UPDATE vms SET ${set.join(', ')} WHERE id = @id`).run({ ...vals, id: vm.id });
+  if (Object.keys($set).length) {
+    $set.updated_at = now();
+    await collections.vms.updateOne({ id: Number(vm.id) }, { $set });
   }
   const needSeed = ['hostname', 'username', 'password'].some((f) => data[f] !== undefined);
   if (needSeed) writeSeed(vm);
-  logActivity({ user_id: user ? user.id : null, vm_id: vm.id, event: 'vm:update', details: data });
+  await logActivity({ user_id: user ? user.id : null, vm_id: vm.id, event: 'vm:update', details: data });
   return getVm(vm.id);
 }
 
-function transferOwner(vm, newOwnerId, actor) {
-  const targetUser = db.prepare('SELECT * FROM users WHERE id = ?').get(newOwnerId);
+async function transferOwner(vm, newOwnerId, actor) {
+  const targetUser = await collections.users.findOne({ id: Number(newOwnerId) });
   if (!targetUser) throw new Error('Target user not found');
-  db.prepare('UPDATE vms SET owner_id = ?, updated_at = ? WHERE id = ?').run(targetUser.id, now(), vm.id);
-  logActivity({ user_id: actor ? actor.id : null, vm_id: vm.id, event: 'vm:transfer_owner', details: { from: vm.owner_id, to: targetUser.id, target_username: targetUser.username } });
+  await collections.vms.updateOne({ id: Number(vm.id) }, { $set: { owner_id: targetUser.id, updated_at: now() } });
+  await logActivity({ user_id: actor ? actor.id : null, vm_id: vm.id, event: 'vm:transfer_owner', details: { from: vm.owner_id, to: targetUser.id, target_username: targetUser.username } });
   return getVm(vm.id);
 }
 
-function resizeDisk(vm, newSize, user) {
+async function resizeDisk(vm, newSize, user) {
   if (isRunning(vm)) throw new Error('Cannot resize disk while VM is running. Stop the VM first.');
   if (!/^[0-9]+[GM]$/i.test(newSize)) throw new Error('Disk size must be like 50G or 512M');
   const r = spawnSync('qemu-img', ['resize', vm.img_file, newSize], { encoding: 'utf8' });
   if (r.status !== 0) throw new Error(r.stderr || 'Failed to resize disk');
-  db.prepare('UPDATE vms SET disk_size = ?, updated_at = ? WHERE id = ?').run(newSize.toUpperCase(), now(), vm.id);
-  logActivity({ user_id: user ? user.id : null, vm_id: vm.id, event: 'vm:resize', details: { newSize } });
+  await collections.vms.updateOne({ id: Number(vm.id) }, { $set: { disk_size: newSize.toUpperCase(), updated_at: now() } });
+  await logActivity({ user_id: user ? user.id : null, vm_id: vm.id, event: 'vm:resize', details: { newSize } });
   return getVm(vm.id);
 }
 
@@ -638,10 +637,11 @@ function totalDiskUsage() {
   } catch (_) { return 0; }
 }
 
-function startOnBootAll() {
-  const vms = db.prepare('SELECT * FROM vms WHERE start_on_boot = 1').all().map(serializeVm);
+async function startOnBootAll() {
+  const rawVms = await collections.vms.find({ start_on_boot: 1 }).toArray();
+  const vms = rawVms.map(serializeVm);
   for (const vm of vms) {
-    try { start(vm); } catch (e) { logger.error('[vm] autostart failed ' + vm.name + ': ' + e.message); }
+    try { await start(vm); } catch (e) { logger.error('[vm] autostart failed ' + vm.name + ': ' + e.message); }
   }
 }
 

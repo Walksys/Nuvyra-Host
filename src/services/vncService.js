@@ -14,19 +14,19 @@ function tokenFromReq(req) {
   return cookie ? cookie.split('=')[1] : null;
 }
 
-function authenticate(vmId, req) {
+async function authenticate(vmId, req) {
   const token = tokenFromReq(req);
   if (!token) return null;
   let user = null;
   try {
     const payload = authService.verifyToken(token);
-    if (payload && payload.sub) user = authService.findById(Number(payload.sub));
+    if (payload && payload.sub) user = await authService.findById(Number(payload.sub));
   } catch (_) {
     return null;
   }
   if (!user || user.suspended) return null;
-  const vm = vmService.getVm(vmId);
-  if (!vm || !vmService.canAccess(user, vm, 'console')) return null;
+  const vm = await vmService.getVm(vmId);
+  if (!vm || !(await vmService.canAccess(user, vm, 'console'))) return null;
   if (!vmService.isRunning(vm) || !vm.vnc_port) return null;
   return { user, vm };
 }
@@ -34,11 +34,11 @@ function authenticate(vmId, req) {
 function attachVncProxy(server) {
   const wss = new WebSocketServer({ noServer: true });
 
-  server.on('upgrade', (req, socket, head) => {
+  server.on('upgrade', async (req, socket, head) => {
     const m = req.url.match(/^\/vncws\/(\d+)(?:[?].*)?$/);
     if (!m) return;
 
-    const ctx = authenticate(parseInt(m[1], 10), req);
+    const ctx = await authenticate(parseInt(m[1], 10), req);
     if (!ctx) {
       socket.write('HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n');
       socket.destroy();

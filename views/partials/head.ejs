@@ -23,7 +23,33 @@ const navbarStyle = settings['panel.navbar_style'] || 'glass';
 <link rel="stylesheet" href="/css/panel.css"/>
 <% if (typeof styles !== 'undefined') { for (const s of styles) { %><link rel="stylesheet" href="<%= s %>"/><% } } %>
 <% if (typeof scripts !== 'undefined') { for (const s of scripts) { %><script src="<%= s %>"></script><% } } %>
-<style>:root { --accent: <%= accent %>; }</style>
+<style>
+:root { --accent: <%= accent %>; }
+html[data-theme="neon"] {
+  --accent: #10b981;
+  --accent-glow: rgba(16, 185, 129, 0.45);
+  --bg-card: rgba(17, 24, 39, 0.85);
+  --border: rgba(16, 185, 129, 0.25);
+}
+html[data-theme="nord"] {
+  --accent: #88c0d0;
+  --accent-glow: rgba(136, 192, 208, 0.35);
+  --bg-card: rgba(46, 52, 64, 0.85);
+  --border: #4c566a;
+}
+html[data-theme="dracula"] {
+  --accent: #bd93f9;
+  --accent-glow: rgba(189, 147, 249, 0.4);
+  --bg-card: rgba(40, 42, 54, 0.85);
+  --border: #44475a;
+}
+html[data-theme="dark"] {
+  --accent: #38bdf8;
+  --accent-glow: rgba(56, 189, 248, 0.35);
+  --bg-card: #09090b;
+  --border: #27272a;
+}
+</style>
 <script>
 window.VP_CONFIG = { apiPort: 3002 };
 function vpApiBase() {
