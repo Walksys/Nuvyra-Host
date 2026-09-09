@@ -52,7 +52,7 @@ const defaultSettings = {
   'panel.favicon_url': '',
   'panel.favicon_file': '',
   'panel.bg_mode': 'color',
-  'panel.bg_color': '#0b1020',
+  'panel.bg_color': '#000000',
   'panel.bg_url': '',
   'panel.bg_file': '',
   'panel.bg_video_file': '',
@@ -69,7 +69,7 @@ const defaultSettings = {
   'panel.navbar_style': 'glass',
   'panel.navbar_transparent': '1',
   'panel.navbar_blur': '1',
-  'panel.accent': '#6366f1',
+  'panel.accent': '#38bdf8',
   'panel.theme': 'dark',
   'panel.wallpapers_api_key': '',
   'billing.currency': 'USD',
@@ -122,6 +122,14 @@ const defaultSettings = {
     ['AlmaLinux 9', 'almalinux', '9', 'https://repo.almalinux.org/almalinux/9/cloud/x86_64/images/AlmaLinux-9-GenericCloud-latest.x86_64.qcow2', 'almalinux', 'root'],
     ['Rocky Linux 9', 'rockylinux', '9', 'https://download.rockylinux.org/pub/rocky/9/images/x86_64/Rocky-9-GenericCloud.latest.x86_64.qcow2', 'rocky', 'root']
   ]),
+  'vm.template_repo': 'https://github.com/nobita329/Template.git',
+  'user.default_cpu_cores': '8',
+  'user.default_ram_mb': '8192',
+  'user.default_disk_gb': '100',
+  'user.default_bandwidth_gb': '1000',
+  'user.default_ipv4': '2',
+  'user.default_snapshots': '5',
+  'user.default_backups': '10',
 };
 
 for (const [k, v] of Object.entries(defaultSettings)) {
@@ -168,7 +176,7 @@ async function initDb() {
     'network_bridges', 'ip_pools', 'port_forwards', 'firewall_rules',
     'api_keys', 'webhooks', 'audit_events', 'plugins_config',
     'billing_plans', 'billing_invoices', 'billing_coupons',
-    'update_history'
+    'update_history', 'quotas', 'templates'
   ];
   for (const name of names) {
     collections[name] = dbInstance.collection(name);
@@ -176,6 +184,8 @@ async function initDb() {
 
   try {
     await Promise.all([
+      collections.templates.createIndex({ vmid: 1 }, { unique: true, sparse: true }),
+      collections.templates.createIndex({ id: 1 }, { unique: true }),
       collections.users.createIndex({ id: 1 }, { unique: true }),
       collections.users.createIndex({ username: 1 }, { unique: true }),
       collections.users.createIndex({ email: 1 }, { unique: true }),
@@ -236,7 +246,12 @@ async function initDb() {
 function ensureConnected() {
   if (dbInstance) return Promise.resolve(dbInstance);
   if (!connectingPromise) {
-    connectingPromise = initDb().then(() => dbInstance);
+    connectingPromise = initDb()
+      .then(() => dbInstance)
+      .catch((err) => {
+        connectingPromise = null;
+        throw err;
+      });
   }
   return connectingPromise;
 }

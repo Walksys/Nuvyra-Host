@@ -59,6 +59,22 @@ router.get('/settings/public', (req, res) => {
   });
 });
 
+// ---------- Wallpapers Public API ----------
+const wallpaperService = require('../services/wallpaperService');
+
+router.get('/wallpapers', async (req, res) => {
+  try {
+    const data = await wallpaperService.getWallpapers({
+      category: req.query.category,
+      page: req.query.page,
+      query: req.query.q || req.query.query,
+    });
+    res.json(data);
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
 // ---------- Authenticated ----------
 router.use(apiAuth);
 
@@ -459,45 +475,30 @@ router.get('/admin/stats', apiAdmin, async (req, res, next) => {
 });
 
 // ---------- Wallpapers & Customization API ----------
-const wallpaperService = require('../services/wallpaperService');
-
-router.get('/wallpapers', async (req, res) => {
-  try {
-    const data = await wallpaperService.getWallpapers({
-      category: req.query.category,
-      page: req.query.page,
-      query: req.query.q || req.query.query,
-    });
-    res.json(data);
-  } catch (e) {
-    res.status(500).json({ ok: false, error: e.message });
-  }
-});
-
-router.post('/wallpapers/apply', json, (req, res) => {
+router.post('/wallpapers/apply', json, async (req, res) => {
   try {
     const { url, mode = 'image', overlay, blur, transparency } = req.body || {};
     if (url) {
       if (mode === 'video') {
-        settings.set('panel.bg_mode', 'video');
-        settings.set('panel.bg_video_url', url);
-        settings.set('panel.bg_video_file', '');
+        await settings.set('panel.bg_mode', 'video');
+        await settings.set('panel.bg_video_url', url);
+        await settings.set('panel.bg_video_file', '');
       } else {
-        settings.set('panel.bg_mode', 'image');
-        settings.set('panel.bg_url', url);
-        settings.set('panel.bg_file', '');
+        await settings.set('panel.bg_mode', 'image');
+        await settings.set('panel.bg_url', url);
+        await settings.set('panel.bg_file', '');
       }
     }
-    if (overlay !== undefined) settings.set('panel.bg_overlay', String(overlay));
-    if (blur !== undefined) settings.set('panel.bg_blur', String(blur));
-    if (transparency !== undefined) settings.set('panel.bg_transparency', String(transparency));
+    if (overlay !== undefined) await settings.set('panel.bg_overlay', String(overlay));
+    if (blur !== undefined) await settings.set('panel.bg_blur', String(blur));
+    if (transparency !== undefined) await settings.set('panel.bg_transparency', String(transparency));
     res.json({ ok: true, message: 'Background applied successfully', settings: settings.all() });
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message });
   }
 });
 
-router.post('/customization/save', json, (req, res) => {
+router.post('/customization/save', json, async (req, res) => {
   try {
     const fields = [
       'panel.bg_mode', 'panel.bg_color', 'panel.bg_url', 'panel.bg_video_url',
@@ -505,7 +506,9 @@ router.post('/customization/save', json, (req, res) => {
       'panel.theme', 'panel.accent'
     ];
     for (const k of fields) {
-      if (req.body[k] !== undefined) settings.set(k, String(req.body[k]));
+      if (req.body[k] !== undefined) {
+        await settings.set(k, String(req.body[k]));
+      }
     }
     res.json({ ok: true, message: 'Customization saved', settings: settings.all() });
   } catch (e) {

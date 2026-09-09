@@ -80,10 +80,11 @@ const iconLayers = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" s
     <%- vmNav(iconActivity, 'Activity', 'activity', page) %>
     <% } %>
 
-    <div class="nav-section-title">Account</div>
-    <a href="/profile" class="nav-link <%= act('profile', page) %>"><span class="v-icon"><%- iconUser %></span><span>Profile</span></a>
-    <a href="/settings" class="nav-link <%= act('userSettings', page) %>"><span class="v-icon"><%- iconSettings %></span><span>Settings</span></a>
-    <a href="/activity" class="nav-link <%= act('activity', page) %>"><span class="v-icon"><%- iconActivity %></span><span>Activity</span></a>
+<div class="nav-section-title">Account</div>
+<a href="/profile" class="nav-link <%= act('profile', page) %>"><span class="v-icon"><%- iconUser %></span><span>Profile</span></a>
+<a href="/settings" class="nav-link <%= act('userSettings', page) %>"><span class="v-icon"><%- iconSettings %></span><span>Settings</span></a>
+<a href="/activity" class="nav-link <%= act('activity', page) %>"><span class="v-icon"><%- iconActivity %></span><span>Activity</span></a>
+<a href="/resources" class="nav-link <%= act('resources', page) %>"><span class="v-icon"><%- iconResources %></span><span>Resources</span></a>
 
     <% if (isAdmin) { %>
     <div class="nav-section-title">Admin Access</div>

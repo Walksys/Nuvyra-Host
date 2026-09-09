@@ -606,6 +606,11 @@ function showTab(name) {
   const target = document.getElementById('tab-' + name);
   if (target) target.style.display = 'block';
   document.querySelectorAll('#settingsTabs .tab').forEach((t) => t.classList.toggle('active', t.dataset.tab === name));
+  try {
+    const u = new URL(window.location);
+    u.searchParams.set('tab', name);
+    window.history.replaceState({}, '', u);
+  } catch (_) {}
 }
 
 function switchBgSubtab(subtab) {
@@ -717,17 +722,17 @@ function previewWallpaper(url) {
   document.body.classList.add('bg-visible');
   const bg = document.getElementById('bgLayer');
   if (bg) {
-    bg.style.backgroundImage = `url('${url}')`;
-    bg.style.backgroundSize = 'cover';
-    bg.style.backgroundPosition = 'center';
-    bg.style.backgroundRepeat = 'no-repeat';
+    bg.style.background = `url('${url}') center/cover no-repeat`;
     bg.style.display = 'block';
   }
   const vid = document.getElementById('bgVideo');
-  if (vid) vid.style.display = 'none';
+  if (vid) {
+    vid.style.display = 'none';
+    try { vid.pause(); } catch (_) {}
+  }
   const overlay = document.getElementById('bgOverlay');
   if (overlay) overlay.style.display = 'block';
-  VP.toast('Previewing wallpaper in background', 'info');
+  VP.toast('Previewing background', 'info');
 }
 
 // One-Click Apply & Save
@@ -764,7 +769,7 @@ function updateLiveTransparency(val) {
   document.getElementById('transparencyValBadge').textContent = `${val}%`;
   document.documentElement.style.setProperty('--panel-transparency', `${val}%`);
   const opacityRatio = (parseFloat(val) / 100).toFixed(2);
-  document.documentElement.style.setProperty('--bg-card', `rgba(15, 23, 42, ${opacityRatio})`);
+  document.documentElement.style.setProperty('--bg-card', `rgba(9, 9, 11, ${opacityRatio})`);
   document.documentElement.style.setProperty('--glass', `rgba(255, 255, 255, ${(0.06 * opacityRatio).toFixed(3)})`);
   scheduleAutoSave();
 }
@@ -772,6 +777,11 @@ function updateLiveTransparency(val) {
 function updateLiveOverlay(val) {
   document.getElementById('overlayValBadge').textContent = `${Math.round(val * 100)}%`;
   document.documentElement.style.setProperty('--bg-overlay-val', val);
+  const overlay = document.getElementById('bgOverlay');
+  if (overlay) {
+    overlay.style.background = `rgba(5, 8, 18, ${val})`;
+    overlay.style.display = 'block';
+  }
   scheduleAutoSave();
 }
 
@@ -804,7 +814,7 @@ async function saveCustomizationSettings(showToast = true) {
   }
 }
 
-function resetCustomizationDefaults() {
+async function resetCustomizationDefaults() {
   updateLiveBlur(16);
   updateLiveTransparency(65);
   updateLiveOverlay(0.55);
@@ -813,10 +823,20 @@ function resetCustomizationDefaults() {
   document.getElementById('sliderOverlay').value = 0.55;
   const bg = document.getElementById('bgLayer');
   if (bg) {
-    bg.style.backgroundImage = 'none';
-    bg.style.backgroundColor = '#090d19';
+    bg.style.background = '#000000';
   }
-  saveCustomizationSettings(true);
+  const vid = document.getElementById('bgVideo');
+  if (vid) {
+    vid.style.display = 'none';
+    vid.src = '';
+  }
+  const overlay = document.getElementById('bgOverlay');
+  if (overlay) overlay.style.display = 'none';
+  document.body.classList.remove('bg-visible');
+  try {
+    await fetch('/admin/settings/background-clear', { method: 'POST' });
+  } catch (_) {}
+  await saveCustomizationSettings(false);
   VP.toast('Customization reset to default', 'info');
 }
 
@@ -881,6 +901,7 @@ async function handleLocalImageUpload(input) {
     const res = await fetch('/admin/settings/background', { method: 'POST', body: fd });
     const d = await res.json();
     if (!res.ok || !d.ok) throw new Error(d.error || 'Upload failed');
+    previewWallpaper(d.url);
     VP.toast('Background image uploaded & applied!', 'success');
   } catch (e) {
     VP.toast(e.message, 'error');
@@ -897,11 +918,20 @@ async function handleLocalVideoUpload(input) {
     const res = await fetch('/admin/settings/background', { method: 'POST', body: fd });
     const d = await res.json();
     if (!res.ok || !d.ok) throw new Error(d.error || 'Upload failed');
+    document.body.classList.add('bg-visible');
+    const bg = document.getElementById('bgLayer');
+    if (bg) {
+      bg.style.background = 'transparent';
+      bg.style.display = 'block';
+    }
     const vid = document.getElementById('bgVideo');
     if (vid) {
       vid.src = d.url;
       vid.style.display = 'block';
+      try { vid.play(); } catch (_) {}
     }
+    const overlay = document.getElementById('bgOverlay');
+    if (overlay) overlay.style.display = 'block';
     VP.toast('Background video uploaded & applied!', 'success');
   } catch (e) {
     VP.toast(e.message, 'error');
@@ -914,11 +944,20 @@ function previewDirectUrl() {
   if (!url) return VP.toast('Please enter a valid URL', 'error');
 
   if (type === 'video') {
+    document.body.classList.add('bg-visible');
+    const bg = document.getElementById('bgLayer');
+    if (bg) {
+      bg.style.background = 'transparent';
+      bg.style.display = 'block';
+    }
     const vid = document.getElementById('bgVideo');
     if (vid) {
       vid.src = url;
       vid.style.display = 'block';
+      try { vid.play(); } catch (_) {}
     }
+    const overlay = document.getElementById('bgOverlay');
+    if (overlay) overlay.style.display = 'block';
     VP.toast('Previewing video background', 'info');
   } else {
     previewWallpaper(url);
@@ -935,7 +974,13 @@ async function applyDirectUrl() {
     const res = await fetch('/api/wallpapers/apply', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + vpToken() },
-      body: JSON.stringify({ url, mode: type })
+      body: JSON.stringify({
+        url,
+        mode: type,
+        blur: document.getElementById('sliderBlur').value,
+        transparency: document.getElementById('sliderTransparency').value,
+        overlay: document.getElementById('sliderOverlay').value
+      })
     });
     const d = await res.json();
     if (!res.ok || !d.ok) throw new Error(d.error || 'Failed to save URL');
@@ -1028,6 +1073,13 @@ async function clearMedia(type) {
 }
 
 // Initial Boot
+try {
+  const urlParams = new URLSearchParams(window.location.search);
+  const initialTab = urlParams.get('tab');
+  if (initialTab && document.getElementById('tab-' + initialTab)) {
+    showTab(initialTab);
+  }
+} catch (_) {}
 updateFavCountBadge();
 load4kWallpapers();
 </script>

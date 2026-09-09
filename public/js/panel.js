@@ -108,5 +108,7 @@ window.VP = (() => {
 
 (function () {
   const m = /(?:^|;\s*)theme=([^;]+)/.exec(document.cookie);
-  if (m) document.documentElement.setAttribute('data-theme', m[1]);
+  const local = localStorage.getItem('vpanel_theme');
+  const t = (m ? m[1] : null) || local || 'dark';
+  document.documentElement.setAttribute('data-theme', t);
 })();

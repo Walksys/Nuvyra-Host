@@ -39,6 +39,11 @@ function createWebApp() {
   // expose auth for middleware
   const { optionalAuth } = require('./middleware/auth');
   app.use(optionalAuth);
+  app.use((req, res, next) => {
+    res.locals.user = req.user || null;
+    res.locals.token = req.cookies?.token || (req.user ? authService.generateToken(req.user) : '');
+    next();
+  });
 
   app.post('/api/locale', express.json(), (req, res) => {
     const lang = String(req.body.lang || req.body.locale || 'en').toLowerCase();
@@ -102,29 +107,35 @@ function attachConsoleSocket(io) {
   });
 
   io.on('connection', (socket) => {
-    socket.on('console:join', async ({ vmId }) => {
-      // Cancel previous pending join
+    socket.data.sessions = socket.data.sessions || {};
+
+    socket.on('console:join', async (payload = {}) => {
+      const vmId = payload.vmId;
+      const sessionId = String(payload.sessionId || '1');
       socket.data.isLeaving = false;
 
-      // Clean up any existing stream on this socket
-      if (socket.data.stream) {
-        try { socket.data.stream.end(); } catch (_) {}
-        socket.data.stream = null;
-      }
-      if (socket.data.conn) {
-        try { socket.data.conn.end(); } catch (_) {}
-        socket.data.conn = null;
+      // Clean up previous session with the same ID if any
+      const prevSession = socket.data.sessions[sessionId];
+      if (prevSession) {
+        if (prevSession.stream) { try { prevSession.stream.end(); } catch (_) {} }
+        if (prevSession.conn) { try { prevSession.conn.end(); } catch (_) {} }
+        delete socket.data.sessions[sessionId];
       }
 
       const vm = await vmService.getVm(parseInt(vmId, 10));
       if (!vm || !(await vmService.canAccess(socket.data.user, vm, 'console'))) {
+        socket.emit('console:error', { sessionId, message: 'Access denied or server not found' });
         socket.emit('console:error', 'Access denied or server not found');
         return;
       }
       if (!vmService.isRunning(vm)) {
+        socket.emit('console:offline', { sessionId });
         socket.emit('console:offline');
         return;
       }
+
+      const initialCols = payload.cols || socket.data.cols || 169;
+      const initialRows = payload.rows || socket.data.rows || 33;
 
       sshService.shellStreamWithRetry(vm, {
         maxRetries: 30,
@@ -137,52 +148,96 @@ function attachConsoleSocket(io) {
             try { conn.end(); } catch (_) {}
             return;
           }
-          socket.data.stream = stream;
-          socket.data.conn = conn;
-          socket.emit('console:ready', { cols: socket.data.cols || 80, rows: socket.data.rows || 24 });
-          stream.on('data', (d) => socket.emit('console:data', d.toString('utf8')));
-          stream.on('close', () => {
-            socket.emit('console:close');
-            socket.data.stream = null;
-            socket.data.conn = null;
+          const sessionObj = { conn, stream, cols: initialCols, rows: initialRows, vmId };
+          socket.data.sessions[sessionId] = sessionObj;
+          if (sessionId === '1' || !socket.data.stream) {
+            socket.data.stream = stream;
+            socket.data.conn = conn;
+          }
+
+          socket.emit('console:ready', { sessionId, cols: initialCols, rows: initialRows });
+
+          stream.on('data', (d) => {
+            const str = d.toString('utf8');
+            socket.emit('console:data', { sessionId, data: str });
+            if (sessionId === '1') socket.emit('console:data', str);
           });
-          stream.on('error', () => {
-            socket.emit('console:close');
-            socket.data.stream = null;
-            socket.data.conn = null;
-          });
-          stream.setWindow(socket.data.rows || 24, socket.data.cols || 80);
+
+          const onEnd = () => {
+            socket.emit('console:close', { sessionId });
+            if (sessionId === '1') socket.emit('console:close');
+            delete socket.data.sessions[sessionId];
+            if (socket.data.stream === stream) socket.data.stream = null;
+            if (socket.data.conn === conn) socket.data.conn = null;
+          };
+
+          stream.on('close', onEnd);
+          stream.on('error', onEnd);
+          stream.setWindow(initialRows, initialCols);
         })
         .catch((e) => {
           if (socket.data.isLeaving || !socket.connected) return;
           if (!vmService.isRunning(vm)) {
+            socket.emit('console:offline', { sessionId });
             socket.emit('console:offline');
           } else {
-            socket.emit('console:error', 'SSH connection failed: ' + e.message);
+            const errMsg = 'SSH connection failed: ' + e.message;
+            socket.emit('console:error', { sessionId, message: errMsg });
+            socket.emit('console:error', errMsg);
           }
         });
     });
 
+    socket.on('console:closeSession', ({ sessionId } = {}) => {
+      const sId = String(sessionId || '1');
+      const sess = socket.data.sessions ? socket.data.sessions[sId] : null;
+      if (sess) {
+        if (sess.stream) { try { sess.stream.end(); } catch (_) {} }
+        if (sess.conn) { try { sess.conn.end(); } catch (_) {} }
+        delete socket.data.sessions[sId];
+        if (socket.data.stream === sess.stream) socket.data.stream = null;
+        if (socket.data.conn === sess.conn) socket.data.conn = null;
+      }
+      socket.emit('console:close', { sessionId: sId });
+    });
+
     socket.on('console:leave', () => {
       socket.data.isLeaving = true;
-      if (socket.data.stream) {
-        try { socket.data.stream.end(); } catch (_) {}
-        socket.data.stream = null;
+      if (socket.data.sessions) {
+        for (const sId of Object.keys(socket.data.sessions)) {
+          const sess = socket.data.sessions[sId];
+          if (sess && sess.stream) { try { sess.stream.end(); } catch (_) {} }
+          if (sess && sess.conn) { try { sess.conn.end(); } catch (_) {} }
+        }
+        socket.data.sessions = {};
       }
-      if (socket.data.conn) {
-        try { socket.data.conn.end(); } catch (_) {}
-        socket.data.conn = null;
-      }
+      socket.data.stream = null;
+      socket.data.conn = null;
     });
 
-    socket.on('console:input', (data) => {
-      if (socket.data.stream) socket.data.stream.write(data);
+    socket.on('console:input', (payload) => {
+      let sId = '1';
+      let data = payload;
+      if (payload && typeof payload === 'object' && payload.data !== undefined) {
+        sId = String(payload.sessionId || '1');
+        data = payload.data;
+      }
+      const sess = (socket.data.sessions && socket.data.sessions[sId]) || (sId === '1' ? { stream: socket.data.stream } : null);
+      if (sess && sess.stream) sess.stream.write(data);
     });
 
-    socket.on('console:resize', ({ cols, rows }) => {
+    socket.on('console:resize', (payload = {}) => {
+      const sId = String(payload.sessionId || '1');
+      const cols = payload.cols || 169;
+      const rows = payload.rows || 33;
       socket.data.cols = cols;
       socket.data.rows = rows;
-      if (socket.data.stream) socket.data.stream.setWindow(rows, cols);
+      const sess = (socket.data.sessions && socket.data.sessions[sId]) || (sId === '1' ? { stream: socket.data.stream } : null);
+      if (sess && sess.stream) {
+        sess.cols = cols;
+        sess.rows = rows;
+        try { sess.stream.setWindow(rows, cols); } catch (_) {}
+      }
     });
 
     socket.on('bootlog:join', async ({ vmId }) => {
@@ -232,8 +287,16 @@ function attachConsoleSocket(io) {
     });
 
     socket.on('disconnect', () => {
-      if (socket.data.stream) socket.data.stream.end();
-      if (socket.data.conn) socket.data.conn.end();
+      if (socket.data.sessions) {
+        for (const sId of Object.keys(socket.data.sessions)) {
+          const sess = socket.data.sessions[sId];
+          if (sess && sess.stream) { try { sess.stream.end(); } catch (_) {} }
+          if (sess && sess.conn) { try { sess.conn.end(); } catch (_) {} }
+        }
+        socket.data.sessions = {};
+      }
+      if (socket.data.stream) { try { socket.data.stream.end(); } catch (_) {} }
+      if (socket.data.conn) { try { socket.data.conn.end(); } catch (_) {} }
       if (socket.data.bootLogStream) {
         socket.data.bootLogStream.close();
         socket.data.bootLogStream = null;
@@ -259,6 +322,8 @@ async function bootstrap() {
   const updateService = require('./services/updateService');
   updateService.initBackgroundChecker();
   await scheduleService.loadAll();
+  const templateService = require('./services/templateService');
+  templateService.initDefaults().catch(e => logger.warn('[app] templateService init error: ' + e.message));
 
   const webApp = createWebApp();
   const apiApp = createApiApp();

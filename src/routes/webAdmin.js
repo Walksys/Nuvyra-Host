@@ -7,6 +7,7 @@ const vmService = require('../services/vmService');
 const backupService = require('../services/backupService');
 const authService = require('../services/authService');
 const activity = require('../services/activityService');
+const resourceService = require('../services/resourceService');
 const { requireAdmin } = require('../middleware/auth');
 const { uploadLogo, uploadFavicon, uploadBackground, uploadMusic } = require('../middleware/upload');
 const multer = require('multer');
@@ -186,9 +187,22 @@ router.get('/admin/users/:id', async (req, res, next) => {
     const otherVms = otherDocs.map(v => ({ ...vmService.serializeVm(v), owner_username: ownerMap.get(v.owner_id) || '' }));
     const loginHistory = await activity.listLoginHistory({ user_id: target.id, limit: 100 });
     const logs = await activity.listActivity({ user_id: target.id, limit: 100 });
-    render(res, 'userDetail', { target: authService.publicUser(target), vms, otherVms, loginHistory, logs });
+    const quota = await resourceService.getUserQuota(target.id);
+    render(res, 'userDetail', { target: authService.publicUser(target), vms, otherVms, loginHistory, logs, quota });
   } catch (err) {
     next(err);
+  }
+});
+
+router.post('/admin/users/:id/quota', express.json(), async (req, res) => {
+  try {
+    const target = await authService.findById(req.params.id);
+    if (!target) return res.status(404).json({ error: 'User not found' });
+    const quota = await resourceService.updateUserQuota(target.id, req.body);
+    await activity.logActivity({ user_id: req.user.id, event: 'admin:quota_update', details: { target: target.username, ...req.body } });
+    return res.json({ ok: true, quota });
+  } catch (e) {
+    return res.status(500).json({ error: e.message });
   }
 });
 
@@ -380,45 +394,45 @@ router.post('/admin/settings/favicon', uploadFavicon.single('file'), (req, res) 
   return res.json({ ok: true, url: `/uploads/favicon/${req.file.filename}` });
 });
 
-router.post('/admin/settings/background', uploadBackground.single('file'), (req, res) => {
+router.post('/admin/settings/background', uploadBackground.single('file'), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
   const isVideo = /\.(mp4|webm|avi|mov)$/i.test(req.file.filename);
   if (isVideo) {
-    settings.set('panel.bg_mode', 'video');
-    settings.set('panel.bg_video_file', `/uploads/background/${req.file.filename}`);
+    await settings.set('panel.bg_mode', 'video');
+    await settings.set('panel.bg_video_file', `/uploads/background/${req.file.filename}`);
   } else {
-    settings.set('panel.bg_mode', 'image');
-    settings.set('panel.bg_file', `/uploads/background/${req.file.filename}`);
+    await settings.set('panel.bg_mode', 'image');
+    await settings.set('panel.bg_file', `/uploads/background/${req.file.filename}`);
   }
   return res.json({ ok: true, url: `/uploads/background/${req.file.filename}`, mode: isVideo ? 'video' : 'image' });
 });
 
-router.post('/admin/settings/music', uploadMusic.single('file'), (req, res) => {
+router.post('/admin/settings/music', uploadMusic.single('file'), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
-  settings.set('panel.music_mode', 'upload');
-  settings.set('panel.music_file', `/uploads/music/${req.file.filename}`);
+  await settings.set('panel.music_mode', 'upload');
+  await settings.set('panel.music_file', `/uploads/music/${req.file.filename}`);
   return res.json({ ok: true, url: `/uploads/music/${req.file.filename}` });
 });
 
-router.post('/admin/settings/logo-clear', (req, res) => {
-  settings.set('panel.logo_mode', 'url');
-  settings.set('panel.logo_file', '');
+router.post('/admin/settings/logo-clear', async (req, res) => {
+  await settings.set('panel.logo_mode', 'url');
+  await settings.set('panel.logo_file', '');
   res.json({ ok: true });
 });
-router.post('/admin/settings/favicon-clear', (req, res) => {
-  settings.set('panel.favicon_mode', 'url');
-  settings.set('panel.favicon_file', '');
+router.post('/admin/settings/favicon-clear', async (req, res) => {
+  await settings.set('panel.favicon_mode', 'url');
+  await settings.set('panel.favicon_file', '');
   res.json({ ok: true });
 });
-router.post('/admin/settings/background-clear', (req, res) => {
-  settings.set('panel.bg_mode', 'color');
-  settings.set('panel.bg_file', '');
-  settings.set('panel.bg_video_file', '');
+router.post('/admin/settings/background-clear', async (req, res) => {
+  await settings.set('panel.bg_mode', 'color');
+  await settings.set('panel.bg_file', '');
+  await settings.set('panel.bg_video_file', '');
   res.json({ ok: true });
 });
-router.post('/admin/settings/music-clear', (req, res) => {
-  settings.set('panel.music_mode', 'none');
-  settings.set('panel.music_file', '');
+router.post('/admin/settings/music-clear', async (req, res) => {
+  await settings.set('panel.music_mode', 'none');
+  await settings.set('panel.music_file', '');
   res.json({ ok: true });
 });
 
@@ -437,15 +451,15 @@ router.get('/admin/wallpapers', async (req, res) => {
   }
 });
 
-router.post('/admin/wallpapers/apply', express.json(), (req, res) => {
+router.post('/admin/wallpapers/apply', express.json(), async (req, res) => {
   const { url, thumbnail, blur, transparency, overlay } = req.body;
   if (!url) return res.status(400).json({ error: 'No url provided' });
-  settings.set('panel.bg_mode', 'image');
-  settings.set('panel.bg_url', url);
-  if (thumbnail) settings.set('panel.bg_thumb', thumbnail);
-  if (blur !== undefined) settings.set('panel.bg_blur', String(blur));
-  if (transparency !== undefined) settings.set('panel.bg_transparency', String(transparency));
-  if (overlay !== undefined) settings.set('panel.bg_overlay', String(overlay));
+  await settings.set('panel.bg_mode', 'image');
+  await settings.set('panel.bg_url', url);
+  if (thumbnail) await settings.set('panel.bg_thumb', thumbnail);
+  if (blur !== undefined) await settings.set('panel.bg_blur', String(blur));
+  if (transparency !== undefined) await settings.set('panel.bg_transparency', String(transparency));
+  if (overlay !== undefined) await settings.set('panel.bg_overlay', String(overlay));
   return res.json({ ok: true, message: 'Wallpaper applied successfully' });
 });
 

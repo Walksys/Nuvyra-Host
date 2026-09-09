@@ -198,12 +198,69 @@
       </a>
     </div>
   </div>
+  <!-- Live VM Telemetry Status Bar -->
+  <div class="card mb-3" style="padding:12px 16px;background:var(--bg-card);border:1px solid var(--border);border-radius:12px;backdrop-filter:blur(10px)">
+    <div class="flex-between" style="flex-wrap:wrap;gap:12px">
+      <!-- Status & Uptime -->
+      <div class="flex" style="gap:12px;align-items:center">
+        <span id="liveStatusPill" class="pill <%= vm.status === 'running' ? 'pill-green' : 'pill-gray' %>" style="font-size:12px;padding:4px 10px">
+          <%= vm.status === 'running' ? '● Online' : 'Stopped' %>
+        </span>
+        <div style="font-size:12.5px;color:var(--text-muted)">
+          Uptime: <span id="liveUptime" class="mono" style="color:#fff;font-weight:600">-</span>
+        </div>
+      </div>
+
+      <!-- CPU / RAM / Disk Metrics -->
+      <div class="flex" style="gap:16px;align-items:center;flex-wrap:wrap">
+        <!-- CPU Metric -->
+        <div class="flex" style="gap:8px;align-items:center">
+          <span style="font-size:12px;color:var(--text-muted)">CPU</span>
+          <div style="width:70px;height:7px;background:rgba(255,255,255,0.1);border-radius:4px;overflow:hidden">
+            <div id="liveCpuBar" style="width:0%;height:100%;background:var(--accent-2);border-radius:4px;transition:width 0.4s"></div>
+          </div>
+          <span id="liveCpuText" class="mono" style="font-size:12px;font-weight:700;color:#fff;min-width:34px">-%</span>
+        </div>
+
+        <!-- RAM Metric -->
+        <div class="flex" style="gap:8px;align-items:center">
+          <span style="font-size:12px;color:var(--text-muted)">RAM</span>
+          <div style="width:70px;height:7px;background:rgba(255,255,255,0.1);border-radius:4px;overflow:hidden">
+            <div id="liveRamBar" style="width:0%;height:100%;background:#a855f7;border-radius:4px;transition:width 0.4s"></div>
+          </div>
+          <span id="liveRamText" class="mono" style="font-size:12px;font-weight:700;color:#fff;min-width:55px">-%</span>
+        </div>
+
+        <!-- Disk Metric -->
+        <div class="flex" style="gap:8px;align-items:center">
+          <span style="font-size:12px;color:var(--text-muted)">Disk</span>
+          <span id="liveDiskText" class="mono" style="font-size:12px;font-weight:700;color:#fff"><%= vm.disk_size || '20G' %></span>
+        </div>
+
+        <!-- IP & SSH Port -->
+        <div class="flex" style="gap:6px;align-items:center">
+          <span class="pill mono font-bold" style="font-size:11px;color:var(--accent-2)">
+            Port <%= vm.ssh_port %>
+          </span>
+          <span class="mono muted text-sm" style="font-size:11px">
+            <%= vm.hostname || 'localhost' %>
+          </span>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <%- include('_tabs') %>
 
+  <!-- Console Navigation Tabs (SSH Terminal / noVNC / Live Boot Logs) -->
   <div class="console-tabs" style="margin-bottom:14px">
     <button class="console-tab active" id="tabTerminal" onclick="switchView('terminal')">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14" style="vertical-align:-2px;margin-right:6px"><path d="M4 17l6-5-6-5M12 19h8"/></svg>
       SSH Terminal
+    </button>
+    <button class="console-tab" id="tabNoVnc" onclick="switchView('novnc')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14" style="vertical-align:-2px;margin-right:6px"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+      noVNC Desktop
     </button>
     <button class="console-tab" id="tabBootLog" onclick="switchView('bootlog')">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14" style="vertical-align:-2px;margin-right:6px"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>
@@ -224,12 +281,25 @@
       </button>
     </div>
 
+    <!-- Multi-Session Tab Bar -->
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px;border-bottom:1px solid var(--border);padding-bottom:8px">
+      <div class="flex" style="gap:6px;align-items:center;flex-wrap:wrap" id="sessionTabsBar">
+        <!-- Dynamic Session Tabs -->
+      </div>
+      <div class="flex" style="gap:6px;align-items:center">
+        <button class="btn btn-sm btn-primary" onclick="addNewSession()" title="Open New SSH Session (24/7 on)" style="display:flex;align-items:center;gap:4px;font-size:12px">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="13" height="13"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          New Session (+)
+        </button>
+      </div>
+    </div>
+
     <div class="console-toolbar flex-between" style="margin-bottom:12px;flex-wrap:wrap;gap:8px">
       <div class="flex" style="gap:8px;align-items:center;flex-wrap:wrap">
         <span id="connState" class="pill <%= vm.status === 'running' ? 'pill-yellow' : 'pill-gray' %>">
           <%= vm.status === 'running' ? 'connecting...' : 'offline' %>
         </span>
-        <button class="btn btn-sm" id="btnReconnect" onclick="sshConnect()">
+        <button class="btn btn-sm" id="btnReconnect" onclick="reconnectActiveSession()">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
           Reconnect
         </button>
@@ -238,14 +308,14 @@
         <button class="btn btn-sm" onclick="sendCtrlD()" title="Send EOF (Ctrl+D)">Ctrl+D</button>
       </div>
 
-      <!-- Size Controls: Auto Size vs 4-Corner Custom Resizing -->
+      <!-- Size Controls: Default size (169x33) -->
       <div class="flex" style="gap:8px;align-items:center;flex-wrap:wrap">
-        <span id="termSizeBadge" class="mono muted text-sm" style="font-size:11.5px">Auto Size</span>
-        <button class="btn btn-sm" id="btnTermAutoSize" onclick="resetToAutoSize('termWrapper')" title="Reset to default responsive Auto Size">
+        <button class="btn btn-sm btn-primary" id="btnTermDefaultSize" onclick="resetToDefault169x33()" title="Reset to Default size (169×33)" style="font-weight:600;display:inline-flex;align-items:center;gap:5px">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
-          Auto Size
+          <span>Default size (169×33)</span>
         </button>
-        <button class="btn btn-sm" onclick="fitTerm()">Fit</button>
+        <span id="termSizeBadge" class="mono text-sm" style="font-size:11.5px;padding:2px 8px;border-radius:6px;background:rgba(255,255,255,0.05);border:1px solid var(--border);color:#38bdf8">169×33</span>
+        <button class="btn btn-sm" onclick="fitTerm()" title="Fit terminal to container">Fit</button>
         <button class="btn btn-sm" onclick="toggleFullscreen('paneTerminal')" title="Toggle Full Screen">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
           Full
@@ -253,15 +323,49 @@
       </div>
     </div>
 
-    <!-- 4-Corner Resizable Wrapper for SSH Terminal -->
+    <!-- 4-Corner Resizable Wrapper for SSH Terminal Sessions -->
     <div class="terminal-wrapper" id="termWrapper">
-      <div class="terminal" id="terminal"></div>
+      <div id="termSessionsContainer" style="width:100%;height:100%"></div>
       <!-- 4 Corner Mouse Drag Handles -->
       <div class="resize-handle rh-tl" data-target="termWrapper" data-dir="tl" title="Drag to resize (Top-Left)"></div>
       <div class="resize-handle rh-tr" data-target="termWrapper" data-dir="tr" title="Drag to resize (Top-Right)"></div>
       <div class="resize-handle rh-bl" data-target="termWrapper" data-dir="bl" title="Drag to resize (Bottom-Left)"></div>
       <div class="resize-handle rh-br" data-target="termWrapper" data-dir="br" title="Drag to resize (Bottom-Right)"></div>
       <div class="resize-handle rh-b" data-target="termWrapper" data-dir="b" title="Drag to resize height (Bottom)"></div>
+    </div>
+  </div>
+
+  <!-- noVNC Desktop Pane -->
+  <div id="paneNoVnc" class="card" style="padding:16px;display:none">
+    <div class="console-toolbar flex-between" style="margin-bottom:12px;flex-wrap:wrap;gap:8px">
+      <div class="flex" style="gap:8px;align-items:center;flex-wrap:wrap">
+        <span id="vncState" class="pill pill-yellow">Disconnected</span>
+        <button class="btn btn-sm btn-primary" onclick="connectVnc()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+          Connect noVNC
+        </button>
+        <button class="btn btn-sm" onclick="disconnectVnc()">Disconnect</button>
+        <button class="btn btn-sm" onclick="sendCtrlAltDel()" title="Send Ctrl+Alt+Del">Ctrl+Alt+Del</button>
+        <span class="mono muted text-sm" style="font-size:11.5px">VNC Display: <%= (vm.vnc_port || 5900) - 5900 %></span>
+      </div>
+
+      <div class="flex" style="gap:8px;align-items:center">
+        <button class="btn btn-sm" onclick="toggleFullscreen('paneNoVnc')" title="Toggle Full Screen">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>
+          Full
+        </button>
+      </div>
+    </div>
+
+    <!-- noVNC Viewport -->
+    <div id="vncScreenWrapper" style="width:100%;height:calc(100vh - 350px);min-height:460px;background:#060913;border:1px solid var(--border);border-radius:12px;overflow:hidden;display:flex;align-items:center;justify-content:center;position:relative">
+      <div id="vncPlaceholder" class="muted" style="text-align:center;padding:30px">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="48" height="48" style="opacity:0.4;margin-bottom:8px"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+        <div style="font-weight:600;font-size:14px;color:#fff;margin-bottom:4px">noVNC Graphic Remote Console</div>
+        <div class="muted text-sm">Direct low-latency QEMU frame-buffer connection. Click "Connect noVNC" to start session.</div>
+        <button class="btn btn-primary btn-sm mt-3" onclick="connectVnc()">Connect Desktop Session</button>
+      </div>
+      <div id="vncTarget" style="width:100%;height:100%;display:none"></div>
     </div>
   </div>
 
@@ -332,7 +436,6 @@
 <script>
 (function () {
   const isVmRunning = <%= vm.status === 'running' ? 'true' : 'false' %>;
-  const termEl = document.getElementById('terminal');
   const bootTermEl = document.getElementById('bootTerminal');
   const rawBootEl = document.getElementById('bootRawContent');
   const stateEl = document.getElementById('connState');
@@ -340,7 +443,11 @@
   const sshBootBanner = document.getElementById('sshBootBanner');
   const termSizeBadge = document.getElementById('termSizeBadge');
 
-  let term, fit;
+  // Multi-Session Dictionary & Active Tracking
+  const sessions = {}; // sessionId -> { id, name, term, fit, el }
+  let activeSessionId = '1';
+  let sessionSeq = 1;
+
   let bootTerm, bootFit;
   let socket = null;
   let connected = false;
@@ -350,6 +457,7 @@
   let rawView = false;
   let rawBootBuffer = '';
   let sseSource = null;
+  let rfbInstance = null;
 
   function setState(text, cls) {
     if (stateEl) {
@@ -394,20 +502,44 @@
     brightWhite: '#ffffff'
   };
 
+  let isDefaultSize = true;
+
   function updateSizeBadge(isCustom = false) {
-    if (!termSizeBadge || !term) return;
-    if (isCustom) {
-      termSizeBadge.textContent = `Custom (${term.cols}×${term.rows})`;
-      termSizeBadge.style.color = 'var(--accent-2)';
+    if (!termSizeBadge) return;
+    const s = sessions[activeSessionId];
+    if (!s || !s.term) return;
+    const cols = s.term.cols;
+    const rows = s.term.rows;
+    const btn = document.getElementById('btnTermDefaultSize');
+    if (cols === 169 && rows === 33) {
+      termSizeBadge.textContent = 'Default size (169×33)';
+      termSizeBadge.style.color = '#38bdf8';
+      if (btn) btn.classList.add('btn-primary');
     } else {
-      termSizeBadge.textContent = `Auto (${term.cols}×${term.rows})`;
-      termSizeBadge.style.color = 'var(--text-dim)';
+      termSizeBadge.textContent = isCustom ? `Custom (${cols}×${rows})` : `${cols}×${rows}`;
+      termSizeBadge.style.color = isCustom ? 'var(--accent-2)' : 'var(--text-dim)';
+      if (btn) btn.classList.remove('btn-primary');
     }
   }
 
-  function initTerm() {
-    if (term) { term.dispose(); term = null; }
-    term = new Terminal({
+  // Multi-Session Management (24/7 on persistence)
+  function createSession(sessionId = '1', name = null) {
+    if (sessions[sessionId]) return sessions[sessionId];
+
+    const sName = name || ('Session #' + sessionSeq++);
+    const container = document.getElementById('termSessionsContainer');
+    const sessEl = document.createElement('div');
+    sessEl.id = 'term_sess_' + sessionId;
+    sessEl.className = 'terminal';
+    sessEl.style.width = '100%';
+    sessEl.style.height = '100%';
+    sessEl.style.display = 'none';
+    if (container) container.appendChild(sessEl);
+
+    // Default Terminal Size: 169x33
+    const sTerm = new Terminal({
+      cols: 169,
+      rows: 33,
       cursorBlink: true,
       cursorStyle: 'block',
       fontSize: 14,
@@ -418,33 +550,170 @@
       scrollback: 10000,
       convertEol: true,
     });
-    fit = new FitAddon.FitAddon();
-    term.loadAddon(fit);
-    term.open(termEl);
-    setTimeout(() => {
-      try {
-        fit.fit();
-        updateSizeBadge(false);
-      } catch (e) {}
-    }, 100);
+    const sFit = new FitAddon.FitAddon();
+    sTerm.loadAddon(sFit);
+    sTerm.open(sessEl);
 
-    term.onData((data) => {
-      if (connected && socket) socket.emit('console:input', data);
-    });
-
-    window.addEventListener('resize', () => {
-      if (activeTab === 'terminal') {
-        try { fit.fit(); sshResize(); updateSizeBadge(); } catch (e) {}
-      } else if (activeTab === 'bootlog') {
-        try { bootFit.fit(); } catch (e) {}
+    sTerm.onData((data) => {
+      if (connected && socket) {
+        socket.emit('console:input', { sessionId, data });
       }
     });
 
-    term.onResize(({ cols, rows }) => {
+    sTerm.onResize(({ cols, rows }) => {
       if (socket && connected && activeTab === 'terminal') {
-        socket.emit('console:resize', { cols, rows });
+        socket.emit('console:resize', { sessionId, cols, rows });
       }
     });
+
+    const sessionObj = {
+      id: sessionId,
+      name: sName,
+      term: sTerm,
+      fit: sFit,
+      el: sessEl
+    };
+    sessions[sessionId] = sessionObj;
+
+    renderSessionTabs();
+
+    if (socket && connected && isVmRunning) {
+      socket.emit('console:join', { vmId: <%= vm.id %>, sessionId, cols: 169, rows: 33 });
+    }
+
+    return sessionObj;
+  }
+
+  function switchSession(sessionId) {
+    if (!sessions[sessionId]) return;
+    activeSessionId = sessionId;
+
+    for (const id of Object.keys(sessions)) {
+      const s = sessions[id];
+      if (id === sessionId) {
+        s.el.style.display = 'block';
+        setTimeout(() => {
+          try {
+            if (isDefaultSize) {
+              s.term.resize(169, 33);
+              sshResize(id);
+            } else {
+              s.fit.fit();
+              sshResize(id);
+            }
+            updateSizeBadge(!isDefaultSize);
+            s.term.focus();
+          } catch (_) {}
+        }, 50);
+      } else {
+        s.el.style.display = 'none';
+      }
+    }
+    renderSessionTabs();
+  }
+
+  function renderSessionTabs() {
+    const bar = document.getElementById('sessionTabsBar');
+    if (!bar) return;
+    bar.innerHTML = '';
+    const ids = Object.keys(sessions);
+
+    ids.forEach((id) => {
+      const s = sessions[id];
+      const isActive = (id === activeSessionId);
+      const tabBtn = document.createElement('div');
+      tabBtn.className = 'session-tab-btn ' + (isActive ? 'active' : '');
+      tabBtn.style.cssText = `
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 5px 12px;
+        border-radius: 6px;
+        font-size: 12px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.2s;
+        background: ${isActive ? 'var(--accent)' : 'rgba(255,255,255,0.05)'};
+        color: ${isActive ? '#fff' : 'var(--text-muted)'};
+        border: 1px solid ${isActive ? 'var(--accent-light)' : 'var(--border)'};
+      `;
+      tabBtn.onclick = () => switchSession(id);
+
+      const titleSpan = document.createElement('span');
+      titleSpan.textContent = s.name;
+      tabBtn.appendChild(titleSpan);
+
+      if (ids.length > 1) {
+        const closeBtn = document.createElement('span');
+        closeBtn.innerHTML = '✕';
+        closeBtn.style.cssText = 'font-size: 11px; opacity: 0.7; padding: 0 2px; border-radius: 3px; cursor: pointer;';
+        closeBtn.onmouseover = () => closeBtn.style.opacity = '1';
+        closeBtn.onmouseout = () => closeBtn.style.opacity = '0.7';
+        closeBtn.onclick = (e) => closeSession(id, e);
+        tabBtn.appendChild(closeBtn);
+      }
+
+      bar.appendChild(tabBtn);
+    });
+  }
+
+  window.addNewSession = function() {
+    const newId = String(Date.now());
+    createSession(newId);
+    switchSession(newId);
+    VP.toast('New SSH session created (24/7 background persistence)', 'success');
+  };
+
+  window.closeSession = function(sessionId, ev) {
+    if (ev) ev.stopPropagation();
+    const sessionKeys = Object.keys(sessions);
+    if (sessionKeys.length <= 1) {
+      VP.toast('At least one session must remain open', 'warning');
+      return;
+    }
+    const sess = sessions[sessionId];
+    if (!sess) return;
+
+    if (socket && connected) {
+      socket.emit('console:closeSession', { sessionId });
+    }
+    try { sess.term.dispose(); } catch (_) {}
+    if (sess.el && sess.el.parentNode) sess.el.parentNode.removeChild(sess.el);
+    delete sessions[sessionId];
+
+    if (activeSessionId === sessionId) {
+      const remaining = Object.keys(sessions);
+      switchSession(remaining[remaining.length - 1]);
+    } else {
+      renderSessionTabs();
+    }
+    VP.toast('Session closed', 'info');
+  };
+
+  window.resetToDefault169x33 = function() {
+    isDefaultSize = true;
+    const s = sessions[activeSessionId];
+    if (s && s.term) {
+      try {
+        s.term.resize(169, 33);
+        if (socket && connected) {
+          socket.emit('console:resize', { sessionId: activeSessionId, cols: 169, rows: 33 });
+        }
+        updateSizeBadge(false);
+        VP.toast('Terminal sized to Default size (169×33)', 'info');
+      } catch (e) {
+        VP.toast('Resize error: ' + e.message, 'error');
+      }
+    }
+  };
+  window.resetToDefault170x33 = window.resetToDefault169x33;
+
+  function sshResize(sId = null) {
+    const id = sId || activeSessionId;
+    const s = sessions[id];
+    if (s && s.term && socket && connected && activeTab === 'terminal') {
+      socket.emit('console:resize', { sessionId: id, cols: s.term.cols, rows: s.term.rows });
+    }
   }
 
   function initBootTerm() {
@@ -466,12 +735,6 @@
     setTimeout(() => { try { bootFit.fit(); } catch (e) {} }, 100);
   }
 
-  function sshResize() {
-    if (term && socket && connected && activeTab === 'terminal') {
-      socket.emit('console:resize', { cols: term.cols, rows: term.rows });
-    }
-  }
-
   function setupSocket() {
     if (socket) return;
     socket = io({
@@ -485,7 +748,9 @@
       connected = true;
       if (activeTab === 'terminal') {
         if (isVmRunning) {
-          sshConnect();
+          for (const sId of Object.keys(sessions)) {
+            socket.emit('console:join', { vmId: <%= vm.id %>, sessionId: sId, cols: 169, rows: 33 });
+          }
         } else {
           setState('offline', 'pill-gray');
         }
@@ -494,37 +759,61 @@
       }
     });
 
-    // SSH Console events
-    socket.on('console:ready', () => {
+    // Multi-Session SSH Console events
+    socket.on('console:ready', (data) => {
       setState('streaming', 'pill-green');
-      if (term) {
-        term.clear();
-        term.focus();
+      const sId = (data && data.sessionId) ? String(data.sessionId) : '1';
+      const s = sessions[sId] || sessions[activeSessionId];
+      if (s && s.term) {
+        s.term.clear();
+        s.term.focus();
       }
       if (sshBootBanner) sshBootBanner.style.display = 'none';
       setTimeout(() => {
-        try { fit.fit(); sshResize(); updateSizeBadge(); } catch (e) {}
+        try {
+          if (s && s.term) {
+            if (isDefaultSize) {
+              s.term.resize(169, 33);
+              sshResize(sId);
+            } else {
+              s.fit.fit();
+              sshResize(sId);
+            }
+            updateSizeBadge(!isDefaultSize);
+          }
+        } catch (e) {}
       }, 100);
     });
 
-    socket.on('console:data', (d) => {
-      if (term && activeTab === 'terminal') term.write(d);
+    socket.on('console:data', (payload) => {
+      if (typeof payload === 'object' && payload !== null && payload.sessionId) {
+        const s = sessions[String(payload.sessionId)];
+        if (s && s.term) s.term.write(payload.data);
+      } else {
+        const s = sessions[activeSessionId] || sessions['1'];
+        if (s && s.term) s.term.write(payload);
+      }
     });
 
-    socket.on('console:offline', () => {
+    socket.on('console:offline', (payload) => {
       setState('offline', 'pill-gray');
       if (sshBootBanner) sshBootBanner.style.display = 'flex';
     });
 
-    socket.on('console:error', (m) => {
+    socket.on('console:error', (payload) => {
       setState('connection failed', 'pill-red');
-      if (term) term.writeln('\r\n\x1b[31m[Error] ' + m + '\x1b[0m\r\n');
+      const msg = typeof payload === 'object' && payload !== null && payload.message ? payload.message : payload;
+      const sId = (payload && payload.sessionId) ? String(payload.sessionId) : activeSessionId;
+      const s = sessions[sId];
+      if (s && s.term) s.term.writeln('\r\n\x1b[31m[Error] ' + msg + '\x1b[0m\r\n');
       if (sshBootBanner) sshBootBanner.style.display = 'flex';
     });
 
-    socket.on('console:close', () => {
+    socket.on('console:close', (payload) => {
       setState('stream closed', 'pill-gray');
-      if (term) term.writeln('\r\n\x1b[33m[Session disconnected. Click Reconnect to resume.]\x1b[0m\r\n');
+      const sId = (payload && payload.sessionId) ? String(payload.sessionId) : activeSessionId;
+      const s = sessions[sId];
+      if (s && s.term) s.term.writeln('\r\n\x1b[33m[Session disconnected. Click Reconnect to resume.]\x1b[0m\r\n');
     });
 
     // Live Boot Log events
@@ -596,17 +885,184 @@
     });
   }
 
-  window.sshConnect = function sshConnect() {
+  window.reconnectActiveSession = function() {
     if (!socket || !connected) {
       setupSocket();
       return;
     }
     setState('connecting...', 'pill-yellow');
-    socket.emit('console:join', { vmId: <%= vm.id %> });
+    socket.emit('console:join', { vmId: <%= vm.id %>, sessionId: activeSessionId, cols: 169, rows: 33 });
+    const s = sessions[activeSessionId];
     setTimeout(() => {
-      try { fit.fit(); sshResize(); updateSizeBadge(); } catch (e) {}
+      try {
+        if (s && s.term) {
+          if (isDefaultSize) {
+            s.term.resize(169, 33);
+            sshResize(activeSessionId);
+          } else {
+            s.fit.fit();
+            sshResize(activeSessionId);
+          }
+          updateSizeBadge(!isDefaultSize);
+        }
+      } catch (_) {}
     }, 200);
   };
+
+  // noVNC Integration
+  window.connectVnc = async function() {
+    const vncState = document.getElementById('vncState');
+    const placeholder = document.getElementById('vncPlaceholder');
+    const target = document.getElementById('vncTarget');
+    if (!target) return;
+
+    if (rfbInstance) {
+      try { rfbInstance.disconnect(); } catch (_) {}
+      rfbInstance = null;
+    }
+
+    if (vncState) {
+      vncState.className = 'pill pill-yellow';
+      vncState.textContent = 'Connecting...';
+    }
+
+    try {
+      const { default: RFB } = await import('/vendor/novnc/core/rfb.js');
+      const token = vpToken();
+      const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const vncUrl = `${proto}//${location.host}/vncws/<%= vm.id %>?token=${token}`;
+
+      target.innerHTML = '';
+      target.style.display = 'block';
+      if (placeholder) placeholder.style.display = 'none';
+
+      rfbInstance = new RFB(target, vncUrl, {
+        wsProtocols: ['binary'],
+        shared: true
+      });
+      rfbInstance.scaleViewport = true;
+      rfbInstance.resizeSession = false;
+
+      rfbInstance.addEventListener('connect', () => {
+        if (vncState) {
+          vncState.className = 'pill pill-green';
+          vncState.innerHTML = '<span class="pulse-dot"></span> Connected';
+        }
+        VP.toast('noVNC desktop connected', 'success');
+      });
+
+      rfbInstance.addEventListener('disconnect', (e) => {
+        if (vncState) {
+          vncState.className = 'pill pill-gray';
+          vncState.textContent = 'Disconnected';
+        }
+        if (placeholder) placeholder.style.display = 'block';
+        if (target) target.style.display = 'none';
+      });
+
+      rfbInstance.addEventListener('credentialsrequired', () => {
+        rfbInstance.sendCredentials({ password: '' });
+      });
+    } catch (e) {
+      if (vncState) {
+        vncState.className = 'pill pill-red';
+        vncState.textContent = 'VNC Failed';
+      }
+      VP.toast('Failed to load noVNC: ' + e.message, 'error');
+    }
+  };
+
+  window.disconnectVnc = function() {
+    if (rfbInstance) {
+      try { rfbInstance.disconnect(); } catch (_) {}
+      rfbInstance = null;
+    }
+    const vncState = document.getElementById('vncState');
+    if (vncState) {
+      vncState.className = 'pill pill-gray';
+      vncState.textContent = 'Disconnected';
+    }
+    const placeholder = document.getElementById('vncPlaceholder');
+    const target = document.getElementById('vncTarget');
+    if (placeholder) placeholder.style.display = 'block';
+    if (target) target.style.display = 'none';
+  };
+
+  window.sendCtrlAltDel = function() {
+    if (rfbInstance) {
+      rfbInstance.sendCtrlAltDel();
+      VP.toast('Sent Ctrl+Alt+Del', 'info');
+    } else {
+      VP.toast('Connect noVNC first to send keyboard events', 'warning');
+    }
+  };
+
+  // VM Live Status Polling
+  async function updateLiveStatus() {
+    try {
+      const res = await fetch('/servers/<%= vm.id %>/status');
+      if (!res.ok) return;
+      const resp = await res.json();
+      const s = resp.stats || resp;
+      if (!s) return;
+
+      const isRunning = s.running || s.status === 'running';
+
+      const pill = document.getElementById('liveStatusPill');
+      if (pill) {
+        pill.className = 'pill ' + (isRunning ? 'pill-green' : 'pill-gray');
+        pill.innerHTML = isRunning ? '<span class="pulse-dot"></span> Online' : 'Stopped';
+      }
+
+      const hpill = document.getElementById('headerStatusPill');
+      if (hpill) {
+        hpill.className = 'pill ' + (isRunning ? 'pill-green' : 'pill-gray');
+        hpill.textContent = isRunning ? 'running' : 'stopped';
+      }
+
+      if (s.cpu) {
+        const cpuPct = Math.min(100, Math.max(0, Math.round(s.cpu.percent || 0)));
+        const cpuBar = document.getElementById('liveCpuBar');
+        const cpuText = document.getElementById('liveCpuText');
+        if (cpuBar) cpuBar.style.width = cpuPct + '%';
+        if (cpuText) cpuText.textContent = cpuPct + '%';
+      }
+
+      if (s.memory) {
+        const memUsed = s.memory.used_mb || 0;
+        const memTotal = s.memory.total_mb || <%= vm.memory || 2048 %>;
+        const memPct = s.memory.percent !== undefined ? s.memory.percent : Math.round((memUsed / memTotal) * 100);
+        const ramBar = document.getElementById('liveRamBar');
+        const ramText = document.getElementById('liveRamText');
+        if (ramBar) ramBar.style.width = Math.min(100, memPct) + '%';
+        if (ramText) ramText.textContent = memUsed + ' MB (' + memPct + '%)';
+      }
+
+      if (s.disk) {
+        const diskAlloc = s.disk.allocated || '<%= vm.disk_size || "20G" %>';
+        const diskUsedMb = s.disk.actual_mb || 0;
+        const diskText = document.getElementById('liveDiskText');
+        if (diskText) diskText.textContent = diskAlloc + (diskUsedMb ? ' (' + diskUsedMb + ' MB)' : '');
+      }
+
+      if (s.uptime !== undefined) {
+        const el = document.getElementById('liveUptime');
+        if (el) {
+          const u = Number(s.uptime) || 0;
+          if (u <= 0 && !isRunning) {
+            el.textContent = 'Offline';
+          } else {
+            const h = Math.floor(u / 3600);
+            const m = Math.floor((u % 3600) / 60);
+            const sec = Math.floor(u % 60);
+            el.textContent = `${h}h ${m}m ${sec}s`;
+          }
+        }
+      }
+    } catch (_) {}
+  }
+  setInterval(updateLiveStatus, 2500);
+  updateLiveStatus();
 
   function joinBootLog() {
     if (sseSource) { sseSource.close(); sseSource = null; }
@@ -778,10 +1234,13 @@
           wrapper.style.height = newHeight + 'px';
 
           // Dynamically fit terminal
-          if (targetId === 'termWrapper' && fit) {
-            fit.fit();
-            sshResize();
-            updateSizeBadge(true);
+          if (targetId === 'termWrapper') {
+            const s = sessions[activeSessionId];
+            if (s && s.fit) {
+              s.fit.fit();
+              sshResize(activeSessionId);
+              updateSizeBadge(true);
+            }
           } else if (targetId === 'bootTermWrapper' && bootFit) {
             bootFit.fit();
           }
@@ -792,11 +1251,14 @@
           window.removeEventListener('mousemove', onMouseMove);
           window.removeEventListener('mouseup', onMouseUp);
 
-          if (targetId === 'termWrapper' && fit) {
-            fit.fit();
-            sshResize();
-            updateSizeBadge(true);
-            if (term) term.focus();
+          if (targetId === 'termWrapper') {
+            const s = sessions[activeSessionId];
+            if (s && s.fit) {
+              s.fit.fit();
+              sshResize(activeSessionId);
+              updateSizeBadge(true);
+              if (s.term) s.term.focus();
+            }
           } else if (targetId === 'bootTermWrapper' && bootFit) {
             bootFit.fit();
           }
@@ -807,6 +1269,34 @@
       });
     });
   }
+
+  window.clearTerm = function () {
+    const s = sessions[activeSessionId];
+    if (s && s.term) s.term.clear();
+  };
+
+  window.fitTerm = function () {
+    const s = sessions[activeSessionId];
+    if (s && s.fit && s.term) {
+      try { s.fit.fit(); sshResize(activeSessionId); s.term.focus(); updateSizeBadge(); } catch (e) {}
+    }
+  };
+
+  window.sendCtrlC = function () {
+    if (connected && socket) {
+      socket.emit('console:input', { sessionId: activeSessionId, data: '\x03' });
+      const s = sessions[activeSessionId];
+      if (s && s.term) s.term.focus();
+    }
+  };
+
+  window.sendCtrlD = function () {
+    if (connected && socket) {
+      socket.emit('console:input', { sessionId: activeSessionId, data: '\x04' });
+      const s = sessions[activeSessionId];
+      if (s && s.term) s.term.focus();
+    }
+  };
 
   // ---------------- Boot Logs Actions ----------------
   window.toggleAutoScroll = function () {
@@ -918,30 +1408,47 @@
     }
   };
 
-  // ---------------- Tab Switching ----------------
+  // ---------------- Tab Switching (SSH Terminal / noVNC / Live Boot Logs) ----------------
   window.switchView = function switchView(tab) {
     activeTab = tab;
     document.getElementById('tabTerminal').classList.toggle('active', tab === 'terminal');
+    document.getElementById('tabNoVnc').classList.toggle('active', tab === 'novnc');
     document.getElementById('tabBootLog').classList.toggle('active', tab === 'bootlog');
     document.getElementById('paneTerminal').style.display = tab === 'terminal' ? 'block' : 'none';
+    document.getElementById('paneNoVnc').style.display = tab === 'novnc' ? 'block' : 'none';
     document.getElementById('paneBootLog').style.display = tab === 'bootlog' ? 'block' : 'none';
 
     if (history.replaceState) {
-      history.replaceState(null, null, tab === 'bootlog' ? '?tab=bootlog' : '?tab=terminal');
+      history.replaceState(null, null, '?tab=' + tab);
     }
 
     if (tab === 'terminal') {
       leaveBootLog();
-      setTimeout(() => {
-        try { fit.fit(); sshResize(); term.focus(); updateSizeBadge(); } catch (e) {}
-      }, 100);
-      if (isVmRunning) {
-        sshConnect();
+      disconnectVnc();
+      const s = sessions[activeSessionId];
+      if (s && s.term) {
+        setTimeout(() => {
+          try {
+            if (isDefaultSize) {
+              s.term.resize(169, 33);
+              sshResize(activeSessionId);
+            } else {
+              s.fit.fit();
+              sshResize(activeSessionId);
+            }
+            s.term.focus();
+            updateSizeBadge(!isDefaultSize);
+          } catch (e) {}
+        }, 100);
       }
+      if (isVmRunning && (!socket || !connected)) {
+        setupSocket();
+      }
+    } else if (tab === 'novnc') {
+      leaveBootLog();
+      connectVnc();
     } else if (tab === 'bootlog') {
-      if (socket && connected) {
-        socket.emit('console:leave');
-      }
+      disconnectVnc();
       setTimeout(() => {
         try { bootFit.fit(); } catch (e) {}
       }, 100);
@@ -951,22 +1458,27 @@
 
   // Check initial tab from query parameter or URL hash
   const urlParams = new URLSearchParams(window.location.search);
-  const initialTab = (urlParams.get('tab') === 'bootlog' || window.location.hash === '#bootlog') ? 'bootlog' : 'terminal';
+  const initialTab = (urlParams.get('tab') === 'bootlog' || window.location.hash === '#bootlog') ? 'bootlog' : (urlParams.get('tab') === 'novnc' ? 'novnc' : 'terminal');
 
-  initTerm();
+  // Initialize Session 1 and Boot Terminal
+  createSession('1', 'Session #1');
+  switchSession('1');
   initBootTerm();
   initCornerResizers();
 
   if (initialTab === 'bootlog') {
     switchView('bootlog');
     setupSocket();
+  } else if (initialTab === 'novnc') {
+    switchView('novnc');
   } else {
     if (isVmRunning) {
       setupSocket();
     } else {
       setState('offline', 'pill-gray');
-      if (term) {
-        term.writeln('\r\n\x1b[33m[Notice] Server is offline. Start the server to launch SSH session or monitor Live Boot Logs.\x1b[0m\r\n');
+      const s = sessions['1'];
+      if (s && s.term) {
+        s.term.writeln('\r\n\x1b[33m[Notice] Server is offline. Start the server to launch SSH session or monitor Live Boot Logs.\x1b[0m\r\n');
       }
       if (sshBootBanner) sshBootBanner.style.display = 'flex';
       setupSocket();

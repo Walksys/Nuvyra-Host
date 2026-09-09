@@ -24,41 +24,69 @@ const navbarStyle = settings['panel.navbar_style'] || 'glass';
 <% if (typeof styles !== 'undefined') { for (const s of styles) { %><link rel="stylesheet" href="<%= s %>"/><% } } %>
 <% if (typeof scripts !== 'undefined') { for (const s of scripts) { %><script src="<%= s %>"></script><% } } %>
 <style>
-:root { --accent: <%= accent %>; }
+:root, html, html[data-theme="dark"], body {
+  --accent: <%= accent || '#38bdf8' %>;
+  --accent-hover: #0284c7;
+  --accent-light: #7dd3fc;
+  --accent-glow: rgba(56, 189, 248, 0.35);
+  --accent-2: #818cf8;
+  --accent-2-glow: rgba(129, 140, 248, 0.35);
+  --bg: #000000;
+  --bg-main: #000000;
+  --bg-card: #09090b;
+  --bg-card-hover: #121215;
+  --bg-input: #0e0e11;
+  --border: #27272a;
+  --border-hover: rgba(255, 255, 255, 0.18);
+  --border-focus: rgba(56, 189, 248, 0.65);
+  --text: #f8fafc;
+  --text-muted: #a1a1aa;
+  --text-dim: #71717a;
+  color-scheme: dark;
+}
+html[data-theme="default"] {
+  --accent: #6366f1;
+  --accent-glow: rgba(99, 102, 241, 0.35);
+  --bg: #0b1020;
+  --bg-main: #0b1020;
+  --bg-card: rgba(15, 23, 42, 0.65);
+  --border: rgba(255, 255, 255, 0.08);
+}
 html[data-theme="neon"] {
   --accent: #10b981;
   --accent-glow: rgba(16, 185, 129, 0.45);
+  --bg: #030712;
+  --bg-main: #030712;
   --bg-card: rgba(17, 24, 39, 0.85);
   --border: rgba(16, 185, 129, 0.25);
 }
 html[data-theme="nord"] {
   --accent: #88c0d0;
   --accent-glow: rgba(136, 192, 208, 0.35);
+  --bg: #2e3440;
+  --bg-main: #2e3440;
   --bg-card: rgba(46, 52, 64, 0.85);
   --border: #4c566a;
 }
 html[data-theme="dracula"] {
   --accent: #bd93f9;
   --accent-glow: rgba(189, 147, 249, 0.4);
+  --bg: #1e1f29;
+  --bg-main: #1e1f29;
   --bg-card: rgba(40, 42, 54, 0.85);
   --border: #44475a;
-}
-html[data-theme="dark"] {
-  --accent: #38bdf8;
-  --accent-glow: rgba(56, 189, 248, 0.35);
-  --bg-card: #09090b;
-  --border: #27272a;
 }
 </style>
 <script>
 window.VP_CONFIG = { apiPort: 3002 };
+window.VP_TOKEN = "<%= (typeof token !== 'undefined' && token) ? token : '' %>";
 function vpApiBase() {
   return '';
 }
 function vpToken() {
   const m = document.cookie.match(/(?:^|;\s*)token=([^;]+)/);
-  return m ? m[1] : '';
+  return (m ? decodeURIComponent(m[1]) : '') || (window.VP_TOKEN || '');
 }
 </script>
 </head>
-<body class="<%= navbarStyle === 'glass' ? '' : 'nav-' + navbarStyle %> <%= navbarTransparent ? 'nav-transparent' : '' %> <%= navbarBlur ? 'nav-blur' : '' %> <%= settings['panel.bg_mode'] !== 'color' ? 'bg-visible' : '' %>">
+<body class="<%= navbarStyle === 'glass' ? '' : 'nav-' + navbarStyle %> <%= navbarTransparent ? 'nav-transparent' : '' %> <%= navbarBlur ? 'nav-blur' : '' %> <%= (settings['panel.bg_mode'] && settings['panel.bg_mode'] !== 'color') ? 'bg-visible' : '' %>">

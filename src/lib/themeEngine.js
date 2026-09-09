@@ -2,6 +2,17 @@ const { settings } = require('./db');
 
 const THEMES = [
   {
+    id: 'dark',
+    name: 'Onyx Pure Black',
+    category: 'High Contrast Dark',
+    description: 'Zero-distraction AMOLED pure black with crisp borders and sky blue highlights',
+    accent: '#38bdf8',
+    accentGlow: 'rgba(56, 189, 248, 0.35)',
+    bg: '#000000',
+    cardBg: '#09090b',
+    border: '#27272a',
+  },
+  {
     id: 'default',
     name: 'Default Slate',
     category: 'Glassmorphic',
@@ -11,17 +22,6 @@ const THEMES = [
     bg: '#0b1020',
     cardBg: 'rgba(15, 23, 42, 0.65)',
     border: 'rgba(255, 255, 255, 0.08)',
-  },
-  {
-    id: 'dark',
-    name: 'Onyx Pure Black',
-    category: 'High Contrast',
-    description: 'Zero-distraction AMOLED pure black with crisp borders and sky blue highlights',
-    accent: '#38bdf8',
-    accentGlow: 'rgba(56, 189, 248, 0.35)',
-    bg: '#000000',
-    cardBg: '#09090b',
-    border: '#27272a',
   },
   {
     id: 'neon',
@@ -67,10 +67,10 @@ class ThemeEngine {
     return THEMES.find(t => t.id === themeId) || THEMES[0];
   }
 
-  getActiveTheme() {
-    const activeId = settings.get('panel.theme', 'default');
-    return this.getTheme(activeId);
-  }
+getActiveTheme() {
+     const activeId = settings.get('panel.theme', 'dark');
+     return this.getTheme(activeId);
+   }
 
   async setActiveTheme(themeId) {
     const found = this.getTheme(themeId);

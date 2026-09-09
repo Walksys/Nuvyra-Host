@@ -9,6 +9,7 @@ const backupService = require('../services/backupService');
 const authService = require('../services/authService');
 const activity = require('../services/activityService');
 const aiLogService = require('../services/aiLogService');
+const resourceService = require('../services/resourceService');
 const { requireAuth } = require('../middleware/auth');
 const { uploadAvatar } = require('../middleware/upload');
 const router = express.Router();
@@ -90,7 +91,8 @@ router.get('/servers/:id/overview', loadVm, async (req, res, next) => {
 });
 
 router.get('/servers/:id/status', loadVm, (req, res) => {
-  res.json({ ok: true, stats: vmService.liveStats(req.vm) });
+  const s = vmService.liveStats(req.vm);
+  res.json({ ok: true, stats: s, ...s });
 });
 
 router.get('/servers/:id/console', loadVm, (req, res) => {
@@ -423,11 +425,29 @@ router.post('/settings/tfa/disable', express.json(), async (req, res) => {
 });
 
 router.get('/activity', async (req, res, next) => {
+   try {
+     const logs = await activity.listActivity({ user_id: req.user.id, limit: 200 });
+     render(res, 'activity', { logs });
+   } catch (err) {
+     next(err);
+   }
+});
+
+router.get('/resources', async (req, res, next) => {
   try {
-    const logs = await activity.listActivity({ user_id: req.user.id, limit: 200 });
-    render(res, 'activity', { logs });
+    const data = await resourceService.getUserResourceData(req.user.id);
+    render(res, 'resources', data);
   } catch (err) {
     next(err);
+  }
+});
+
+router.get('/resources/stats', async (req, res, next) => {
+  try {
+    const data = await resourceService.getUserResourceData(req.user.id);
+    res.json({ ok: true, ...data });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
   }
 });
 

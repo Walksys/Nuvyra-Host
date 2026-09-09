@@ -1,89 +1,110 @@
-const express = require('express');
+const express = require("express");
 const router = express.Router();
-const { requireAdmin } = require('../middleware/auth');
-const { collections, settings } = require('../lib/db');
-const vmService = require('../services/vmService');
-const nodeService = require('../services/nodeService');
-const activity = require('../services/activityService');
-const config = require('../lib/config');
-const { render } = require('./webAdmin');
+const { requireAdmin } = require("../middleware/auth");
+const { collections, settings } = require("../lib/db");
+const vmService = require("../services/vmService");
+const nodeService = require("../services/nodeService");
+const resourceService = require("../services/resourceService");
+const activity = require("../services/activityService");
+const config = require("../lib/config");
 
 router.use(requireAdmin);
 
-router.get('/', async (req, res, next) => {
+function render(res, view, vars = {}) {
+  res.render("admin/" + view, {
+    page: "admin-resources",
+    user: res.req.user,
+    settings: settings.all(),
+    ...vars,
+  });
+}
+
+router.get("/", async (req, res, next) => {
   try {
     const nodeStats = await nodeService.getNodeLiveStats();
-    const vms = (await vmService.dbVms()).map(vmService.serializeVm);
-    
+    const rawVms = await collections.vms.find({}).sort({ id: -1 }).toArray();
+    const users = await collections.users.find({}, { projection: { id: 1, username: 1, email: 1 } }).toArray();
+    const userMap = {};
+    for (const u of users) userMap[u.id] = u;
+
+    const vms = rawVms.map(v => {
+      const serialized = vmService.serializeVm(v);
+      serialized.owner = userMap[v.owner_id] || { username: "Admin", email: "admin@vpanel.local" };
+      serialized.isRunning = vmService.isRunning(v);
+      return serialized;
+    });
+
     // Calculate total allocated resources across all VMs
     let totalAllocatedCores = 0;
-    let totalAllocatedRAM = 0;
-    let totalAllocatedDisk = 0;
+    let totalAllocatedRAM_MB = 0;
+    let totalAllocatedDisk_GB = 0;
     let totalAllocatedBandwidth = 0;
     let totalAllocatedIPv4 = 0;
-    
+
     for (const vm of vms) {
-      totalAllocatedCores += parseInt(vm.cpus || '0');
-      totalAllocatedRAM += parseInt(vm.memory || '0');
-      totalAllocatedDisk += parseInt(vm.disk_size || '0');
-      // Bandwidth might be stored differently, using a default if not present
-      totalAllocatedBandwidth += parseInt(vm.bandwidth || '0');
-      totalAllocatedIPv4 += (vm.ipv4_count || 1); // Assuming at least 1 IP if not specified
+      totalAllocatedCores += parseInt(vm.cpus || "1", 10);
+      totalAllocatedRAM_MB += parseInt(vm.memory || "2048", 10);
+      totalAllocatedDisk_GB += parseInt(String(vm.disk_size || "20").replace(/\D/g, "") || "20", 10);
+      totalAllocatedBandwidth += parseInt(vm.bandwidth || "100", 10);
+      totalAllocatedIPv4 += parseInt(vm.ipv4_count || "1", 10);
     }
-    
-    // Get node limits (total available resources)
-    const nodeLimits = {
-      cpuCores: nodeStats.cpu_cores || 8,
-      cpuLimit: nodeStats.cpu_limit || 100,
-      ram: nodeStats.ram_total || 32,
-      disk: nodeStats.disk_total || 500,
-      bandwidth: nodeStats.bandwidth_total || 10,
-      ipv4: nodeStats.ipv4_total || 5
-    };
-    
-    // Calculate usage percentages
+
+    const hostCores = nodeStats.cpu?.cores_count || 4;
+    const hostRamMB = nodeStats.memory?.total_mb || 8192;
+    const hostDiskGB = parseFloat(nodeStats.disk?.total_gb) || 100;
+
     const usage = {
       cpuCores: {
         allocated: totalAllocatedCores,
-        limit: nodeLimits.cpuCores,
-        percentage: nodeLimits.cpuCores > 0 ? (totalAllocatedCores / nodeLimits.cpuCores) * 100 : 0
-      },
-      cpuLimit: {
-        allocated: totalAllocatedCores, // This is actually used cores, not percentage
-        limit: nodeLimits.cpuLimit,
-        percentage: nodeLimits.cpuLimit > 0 ? (totalAllocatedCores / nodeLimits.cpuCores) * (nodeLimits.cpuLimit / 100) : 0
+        limit: hostCores,
+        percentage: Math.min(100, Math.round((totalAllocatedCores / (hostCores || 1)) * 100)),
+        livePercent: nodeStats.cpu?.percent || 0
       },
       ram: {
-        allocated: totalAllocatedRAM,
-        limit: nodeLimits.ram,
-        percentage: nodeLimits.ram > 0 ? (totalAllocatedRAM / nodeLimits.ram) * 100 : 0
+        allocatedMb: totalAllocatedRAM_MB,
+        allocatedGb: (totalAllocatedRAM_MB / 1024).toFixed(1),
+        limitMb: hostRamMB,
+        limitGb: (hostRamMB / 1024).toFixed(1),
+        percentage: Math.min(100, Math.round((totalAllocatedRAM_MB / (hostRamMB || 1)) * 100)),
+        livePercent: nodeStats.memory?.percent || 0,
+        liveUsedMb: nodeStats.memory?.used_mb || 0
       },
       disk: {
-        allocated: totalAllocatedDisk,
-        limit: nodeLimits.disk,
-        percentage: nodeLimits.disk > 0 ? (totalAllocatedDisk / nodeLimits.disk) * 100 : 0
+        allocatedGb: totalAllocatedDisk_GB,
+        limitGb: hostDiskGB.toFixed(1),
+        percentage: Math.min(100, Math.round((totalAllocatedDisk_GB / (hostDiskGB || 1)) * 100)),
+        livePercent: nodeStats.disk?.percent || 0,
+        liveUsedGb: nodeStats.disk?.used_gb || "0"
       },
       bandwidth: {
-        allocated: totalAllocatedBandwidth,
-        limit: nodeLimits.bandwidth,
-        percentage: nodeLimits.bandwidth > 0 ? (totalAllocatedBandwidth / nodeLimits.bandwidth) * 100 : 0
+        allocatedGb: totalAllocatedBandwidth,
+        limitGb: 5000,
+        percentage: Math.min(100, Math.round((totalAllocatedBandwidth / 5000) * 100))
       },
       ipv4: {
         allocated: totalAllocatedIPv4,
-        limit: nodeLimits.ipv4,
-        percentage: nodeLimits.ipv4 > 0 ? (totalAllocatedIPv4 / nodeLimits.ipv4) * 100 : 0
+        limit: 10,
+        percentage: Math.min(100, Math.round((totalAllocatedIPv4 / 10) * 100))
       }
     };
-    
-    render(res, 'resources', { 
-      nodeStats, 
-      vms, 
-      nodeLimits,
+
+    render(res, "resources", {
+      nodeStats,
+      vms,
       usage,
-      page: 'admin-resources'
+      page: "admin-resources"
     });
   } catch (err) {
     next(err);
+  }
+});
+
+router.get("/api/stats", async (req, res) => {
+  try {
+    const nodeStats = await nodeService.getNodeLiveStats();
+    res.json({ ok: true, stats: nodeStats });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
   }
 });
 

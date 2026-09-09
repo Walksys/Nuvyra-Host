@@ -31,8 +31,56 @@
       <div class="mt-3"><button class="btn btn-primary" onclick="saveUser()">Save User Settings</button></div>
     </div>
 
-    <!-- Virtual Machines Owned Card -->
+    <!-- User Resource Limits & Quotas Card -->
     <div class="card">
+      <div class="flex-between mb-3">
+        <div class="card-title" style="margin:0">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18"/></svg>
+          Resource Limits &amp; Quotas
+        </div>
+        <span class="pill pill-blue">Per-User Limits</span>
+      </div>
+
+      <div class="grid grid-2" style="gap:10px">
+        <div class="form-group mb-2">
+          <label>Max CPU Cores</label>
+          <input type="number" id="qCpu" value="<%= (typeof quota !== 'undefined' && quota.cpu_cores) || 8 %>" min="1" max="128"/>
+        </div>
+        <div class="form-group mb-2">
+          <label>Max RAM (MB)</label>
+          <input type="number" id="qRam" value="<%= (typeof quota !== 'undefined' && quota.ram_mb) || 8192 %>" min="256" step="512"/>
+        </div>
+        <div class="form-group mb-2">
+          <label>Max Disk (GB)</label>
+          <input type="number" id="qDisk" value="<%= (typeof quota !== 'undefined' && quota.disk_gb) || 100 %>" min="5"/>
+        </div>
+        <div class="form-group mb-2">
+          <label>Max Bandwidth (GB)</label>
+          <input type="number" id="qBw" value="<%= (typeof quota !== 'undefined' && quota.bandwidth_gb) || 1000 %>" min="10"/>
+        </div>
+        <div class="form-group mb-2">
+          <label>IPv4 Addresses</label>
+          <input type="number" id="qIpv4" value="<%= (typeof quota !== 'undefined' && quota.ipv4) || 2 %>" min="1"/>
+        </div>
+        <div class="form-group mb-2">
+          <label>Max Snapshots</label>
+          <input type="number" id="qSnapshots" value="<%= (typeof quota !== 'undefined' && quota.snapshots) || 5 %>" min="0"/>
+        </div>
+      </div>
+
+      <div class="form-group mb-2">
+        <label>Max Backups</label>
+        <input type="number" id="qBackups" value="<%= (typeof quota !== 'undefined' && quota.backups) || 10 %>" min="0"/>
+      </div>
+
+      <div class="mt-3">
+        <button class="btn btn-primary" onclick="saveQuota()">Save Resource Limits</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Virtual Machines Owned Card (Full Width) -->
+  <div class="card mt-3">
       <div class="flex-between mb-3" style="flex-wrap:wrap;gap:8px">
         <div class="card-title" style="margin:0">Servers Owned (<%= vms.length %>)</div>
         <div class="flex" style="gap:6px">
@@ -204,6 +252,22 @@ async function saveUser() {
     await VP.api('/admin/users/<%= target.id %>/update', { method: 'POST', body });
     VP.toast('User updated', 'success');
     setTimeout(() => location.reload(), 700);
+  } catch (e) { VP.toast(e.message, 'error'); }
+}
+
+async function saveQuota() {
+  const body = {
+    cpu_cores: parseInt(val('qCpu'), 10),
+    ram_mb: parseInt(val('qRam'), 10),
+    disk_gb: parseInt(val('qDisk'), 10),
+    bandwidth_gb: parseInt(val('qBw'), 10),
+    ipv4: parseInt(val('qIpv4'), 10),
+    snapshots: parseInt(val('qSnapshots'), 10),
+    backups: parseInt(val('qBackups'), 10),
+  };
+  try {
+    await VP.api('/admin/users/<%= target.id %>/quota', { method: 'POST', body });
+    VP.toast('Resource limits & quotas saved successfully!', 'success');
   } catch (e) { VP.toast(e.message, 'error'); }
 }
 async function setField(body) {

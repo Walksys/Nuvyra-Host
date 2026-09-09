@@ -195,6 +195,10 @@ async function runAutoFullTest() {
     { path: `/servers/${testVmId}/settings`, label: 'VM Settings' },
     { path: `/servers/${testVmId}/startup`, label: 'VM Startup' },
     { path: `/servers/${testVmId}/subusers`, label: 'VM Subusers' },
+    { path: '/resources', label: 'User Resources View' },
+    { path: '/resources/stats', label: 'User Resources Live Telemetry' },
+    { path: '/admin/resources', label: 'Admin Cluster Resources Overview' },
+    { path: '/admin/storage/api/templates', label: 'Admin Templates API' },
   ];
 
   for (const r of webRoutes) {
@@ -204,6 +208,14 @@ async function runAutoFullTest() {
     } catch (e) {
       assert(false, `GET ${r.path} [${r.label}] -> Error: ${e.response ? e.response.status : e.message}`);
     }
+  }
+
+  // Verify Template Repo Sync
+  try {
+    const syncRes = await axios.post(`${BASE_WEB}/admin/storage/api/templates/sync`, {}, { headers: authHeaders });
+    assert(syncRes.data.ok === true && syncRes.data.count >= 10, `POST /admin/storage/api/templates/sync synced ${syncRes.data.count} templates`);
+  } catch (e) {
+    assert(false, 'Template sync test failed: ' + e.message);
   }
 
   // Clean up test VM

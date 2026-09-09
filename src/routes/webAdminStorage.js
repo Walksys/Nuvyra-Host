@@ -1,5 +1,6 @@
 const express = require('express');
 const storageService = require('../services/storageService');
+const templateService = require('../services/templateService');
 const { requireAdmin } = require('../middleware/auth');
 const { settings } = require('../lib/db');
 const activity = require('../services/activityService');
@@ -9,10 +10,11 @@ router.use(requireAdmin);
 
 router.get('/', async (req, res, next) => {
   try {
-    const [pools, isos, volumes] = await Promise.all([
+    const [pools, isos, volumes, templates] = await Promise.all([
       storageService.listPools(),
       storageService.listIsos(),
       storageService.listVolumes(),
+      templateService.listTemplates(),
     ]);
 
     res.render('admin/storage', {
@@ -22,6 +24,8 @@ router.get('/', async (req, res, next) => {
       pools,
       isos,
       volumes,
+      templates,
+      templateRepo: templateService.getRepoUrl(),
     });
   } catch (e) {
     next(e);
@@ -115,4 +119,29 @@ router.post('/api/volumes/delete', async (req, res) => {
   }
 });
 
+router.get('/api/templates', async (req, res) => {
+  try {
+    const templates = await templateService.listTemplates();
+    res.json({ ok: true, repo: templateService.getRepoUrl(), count: templates.length, templates });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
+router.post('/api/templates/sync', async (req, res) => {
+  try {
+    const { repo } = req.body || {};
+    const result = await templateService.syncTemplates(repo);
+    await activity.logActivity({
+      user_id: req.user.id,
+      event: 'template:sync',
+      details: { repo: result.repo, count: result.count }
+    });
+    res.json(result);
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
+
 module.exports = router;
+

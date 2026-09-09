@@ -8,12 +8,16 @@ async function getUserFromReq(req) {
     if (t && t !== 'undefined' && t !== 'null' && t !== '[object Object]') candidates.push(t);
   }
   if (req.cookies && req.cookies.token) {
-    const t = String(req.cookies.token).trim();
-    if (t && t !== 'undefined' && t !== 'null') candidates.push(t);
+    const raw = String(req.cookies.token).trim();
+    let t = raw;
+    try { t = decodeURIComponent(raw); } catch (_) {}
+    if (t && t !== 'undefined' && t !== 'null' && t !== '[object Object]') candidates.push(t);
   }
   if (req.query && req.query.token) {
-    const t = String(req.query.token).trim();
-    if (t && t !== 'undefined' && t !== 'null') candidates.push(t);
+    const raw = String(req.query.token).trim();
+    let t = raw;
+    try { t = decodeURIComponent(raw); } catch (_) {}
+    if (t && t !== 'undefined' && t !== 'null' && t !== '[object Object]') candidates.push(t);
   }
 
   let user = null;

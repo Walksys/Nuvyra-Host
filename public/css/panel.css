@@ -3,26 +3,27 @@
    ========================================================================== */
 
 :root {
-  --accent: #6366f1;
-  --accent-hover: #4f46e5;
-  --accent-light: #818cf8;
-  --accent-glow: rgba(99, 102, 241, 0.35);
-  --accent-2: #38bdf8;
-  --accent-2-glow: rgba(56, 189, 248, 0.35);
+  --accent: #38bdf8;
+  --accent-hover: #0284c7;
+  --accent-light: #7dd3fc;
+  --accent-glow: rgba(56, 189, 248, 0.35);
+  --accent-2: #818cf8;
+  --accent-2-glow: rgba(129, 140, 248, 0.35);
   
-  --bg: #090d19;
-  --bg-card: rgba(15, 23, 42, 0.65);
-  --bg-card-hover: rgba(30, 41, 59, 0.8);
-  --bg-input: rgba(10, 15, 29, 0.65);
+  --bg: #000000;
+  --bg-main: #000000;
+  --bg-card: #09090b;
+  --bg-card-hover: #121215;
+  --bg-input: #0e0e11;
   
   --text: #f8fafc;
-  --text-muted: #94a3b8;
-  --text-dim: #64748b;
+  --text-muted: #a1a1aa;
+  --text-dim: #71717a;
   
-  --glass: rgba(255, 255, 255, 0.04);
-  --glass-strong: rgba(15, 23, 42, 0.85);
-  --border: rgba(255, 255, 255, 0.08);
-  --border-focus: rgba(99, 102, 241, 0.65);
+  --glass: rgba(255, 255, 255, 0.03);
+  --glass-strong: rgba(18, 18, 22, 0.9);
+  --border: #27272a;
+  --border-focus: rgba(56, 189, 248, 0.65);
   --border-hover: rgba(255, 255, 255, 0.18);
   
   --green: #10b981;
@@ -48,6 +49,7 @@
   --panel-blur: 16px;
   --panel-transparency: 65%;
   --bg-overlay-val: 0.55;
+  color-scheme: dark;
 }
 
 /* ---------- Global Resets ---------- */
@@ -61,14 +63,12 @@ html, body {
   min-height: 100%;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  background-color: var(--bg);
 }
 
 body {
   font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   background-color: var(--bg);
-  background-image: 
-    radial-gradient(at 0% 0%, rgba(99, 102, 241, 0.14) 0px, transparent 50%),
-    radial-gradient(at 100% 100%, rgba(56, 189, 248, 0.09) 0px, transparent 50%);
   background-attachment: fixed;
   color: var(--text);
   font-size: 14px;
@@ -93,10 +93,20 @@ a:hover {
 ::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.3); }
 
 /* ---------- Ambient Background Layer ---------- */
+body.bg-visible, html:has(body.bg-visible) {
+  background-color: transparent !important;
+  background: transparent !important;
+}
 .bg-layer, .bg-layer video, .bg-overlay {
   position: fixed;
   inset: 0;
+}
+.bg-layer {
   z-index: -2;
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  transition: background 0.3s ease;
 }
 .bg-layer video {
   width: 100%;
@@ -105,8 +115,9 @@ a:hover {
 }
 .bg-overlay {
   z-index: -1;
-  background: rgba(5, 8, 18, var(--bg-overlay-val));
+  background: rgba(5, 8, 18, var(--bg-overlay-val, 0.55));
   pointer-events: none;
+  transition: background 0.3s ease;
 }
 
 /* ---------- Topbar Header ---------- */

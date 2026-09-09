@@ -8,11 +8,13 @@ process.title = 'vpanel';
   try {
     const { io } = await bootstrap();
 
-    process.on('SIGINT', () => {
+    const shutdown = () => {
       logger.info('[panel] shutting down');
       if (io) io.close();
       process.exit(0);
-    });
+    };
+    process.on('SIGINT', shutdown);
+    process.on('SIGTERM', shutdown);
   } catch (err) {
     logger.error('[panel] bootstrap error: ' + (err.stack || err));
     process.exit(1);
