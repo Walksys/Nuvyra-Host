@@ -1,0 +1,206 @@
+<% layout('layouts/admin') %>
+
+<div class="container-fluid">
+  <div class="row">
+    <div class="col-12">
+      <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <h5 class="mb-0">System Resources Overview</h5>
+          <span class="badge bg-primary">Live Data</span>
+        </div>
+        <div class="card-body">
+          <div class="row mb-4">
+            <div class="col-md-3">
+              <div class="resource-card">
+                <h6>CPU Cores</h6>
+                <div class="progress">
+                  <div class="progress-bar <%= usage.cpuCores.percentage > 90 ? 'bg-danger' : usage.cpuCores.percentage > 70 ? 'bg-warning' : 'bg-success' %>"
+                       style="width: <%= usage.cpuCores.percentage %>%">
+                    <%= usage.cpuCores.allocated %> / <%= usage.cpuCores.limit %> Cores
+                  </div>
+                </div>
+                <small class="text-muted"><%= usage.cpuCores.percentage.toFixed(1) %>% Allocated</small>
+              </div>
+            </div>
+            <div class="col-md-3">
+              <div class="resource-card">
+                <h6>CPU Limit</h6>
+                <div class="progress">
+                  <div class="progress-bar <%= usage.cpuLimit.percentage > 90 ? 'bg-danger' : usage.cpuLimit.percentage > 70 ? 'bg-warning' : 'bg-success' %>"
+                       style="width: <%= usage.cpuLimit.percentage %>%">
+                    <%= (usage.cpuCores.allocated / usage.cpuCores.limit * 100).toFixed(1) %>% / <%= usage.cpuLimit.limit %>%
+                  </div>
+                </div>
+                <small class="text-muted"><%= usage.cpuLimit.percentage.toFixed(1) %>% Usage</small>
+              </div>
+            </div>
+            <div class="col-md-3">
+              <div class="resource-card">
+                <h6>RAM</h6>
+                <div class="progress">
+                  <div class="progress-bar <%= usage.ram.percentage > 90 ? 'bg-danger' : usage.ram.percentage > 70 ? 'bg-warning' : 'bg-success' %>"
+                       style="width: <%= usage.ram.percentage %>%">
+                    <%= usage.ram.allocated %> GB / <%= usage.ram.limit %> GB
+                  </div>
+                </div>
+                <small class="text-muted"><%= usage.ram.percentage.toFixed(1) %>% Allocated</small>
+              </div>
+            </div>
+            <div class="col-md-3">
+              <div class="resource-card">
+                <h6>Disk Storage</h6>
+                <div class="progress">
+                  <div class="progress-bar <%= usage.disk.percentage > 90 ? 'bg-danger' : usage.disk.percentage > 70 ? 'bg-warning' : 'bg-success' %>"
+                       style="width: <%= usage.disk.percentage %>%">
+                    <%= usage.disk.allocated %> GB / <%= usage.disk.limit %> GB
+                  </div>
+                </div>
+                <small class="text-muted"><%= usage.disk.percentage.toFixed(1) %>% Allocated</small>
+              </div>
+            </div>
+          </div>
+          
+          <div class="row mb-4">
+            <div class="col-md-3">
+              <div class="resource-card">
+                <h6>Bandwidth</h6>
+                <div class="progress">
+                  <div class="progress-bar <%= usage.bandwidth.percentage > 90 ? 'bg-danger' : usage.bandwidth.percentage > 70 ? 'bg-warning' : 'bg-success' %>"
+                       style="width: <%= usage.bandwidth.percentage %>%">
+                    <%= usage.bandwidth.allocated %> TB / <%= usage.bandwidth.limit %> TB
+                  </div>
+                </div>
+                <small class="text-muted"><%= usage.bandwidth.percentage.toFixed(1) %>% Allocated</small>
+              </div>
+            </div>
+            <div class="col-md-3">
+              <div class="resource-card">
+                <h6>IPv4 Addresses</h6>
+                <div class="progress">
+                  <div class="progress-bar <%= usage.ipv4.percentage > 90 ? 'bg-danger' : usage.ipv4.percentage > 70 ? 'bg-warning' : 'bg-success' %>"
+                       style="width: <%= usage.ipv4.percentage %>%">
+                    <%= usage.ipv4.allocated %> / <%= usage.ipv4.limit %>
+                  </div>
+                </div>
+                <small class="text-muted"><%= usage.ipv4.percentage.toFixed(1) %>% Allocated</small>
+              </div>
+            </div>
+          </div>
+          
+          <% if (vms.length > 0) { %>
+          <div class="card mt-4">
+            <div class="card-header">
+              <h6>VM Resource Allocation</h6>
+            </div>
+            <div class="card-body">
+              <div class="table-responsive">
+                <table class="table table-hover align-middle">
+                  <thead>
+                    <tr>
+                      <th>VM Name</th>
+                      <th>Owner</th>
+                      <th>Status</th>
+                      <th>CPU Cores</th>
+                      <th>RAM</th>
+                      <th>Disk</th>
+                      <th>Bandwidth</th>
+                      <th>IPv4</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <% vms.forEach(function(vm) { %>
+                    <tr>
+                      <td><%= vm.name %></td>
+                      <td>
+                        <% if (vm.owner) { %>
+                          <%= vm.owner.username %>
+                        <% } else { %>
+                          <span class="text-muted">Unknown</span>
+                        <% } %>
+                      </td>
+                      <td>
+                        <span class="badge <%= vm.status === 'running' ? 'bg-success' : vm.status === 'stopped' ? 'bg-secondary' : 'bg-warning' %>">
+                          <%= vm.status.charAt(0).toUpperCase() + vm.status.slice(1) %>
+                        </span>
+                      </td>
+                      <td><%= vm.cpus || '0' %></td>
+                      <td><%= vm.memory || '0' %> GB</td>
+                      <td><%= vm.disk_size || '0' %> GB</td>
+                      <td><%= (vm.bandwidth || '0') %> TB</td>
+                      <td><%= vm.ipv4_count || 1 %></td>
+                    </tr>
+                    <% }); %>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+          <% } %>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+.resource-card {
+  background: white;
+  border-radius: 8px;
+  padding: 1.5rem;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  border: 1px solid #eee;
+  height: 100%;
+}
+
+.resource-card h6 {
+  margin-top: 0;
+  margin-bottom: 1rem;
+  color: #333;
+  font-size: 0.9rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.progress {
+  height: 20px;
+  margin-bottom: 0.5rem;
+  background-color: #e9ecef;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.progress-bar {
+  transition: width 0.6s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-weight: 600;
+  font-size: 0.75rem;
+  text-shadow: 0 1px 1px rgba(0,0,0,0.2);
+}
+
+.resource-card small {
+  display: block;
+  margin-top: 0.25rem;
+}
+</style>
+
+<script>
+// Auto-refresh resource data every 30 seconds
+setInterval(function() {
+  fetch('/admin/resources')
+    .then(response => response.text())
+    .then(html => {
+      // Extract the main content and update it
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(html, 'text/html');
+      const newContent = doc.querySelector('.container-fluid');
+      const currentContent = document.querySelector('.container-fluid');
+      if (newContent && currentContent) {
+        currentContent.innerHTML = newContent.innerHTML;
+      }
+    })
+    .catch(err => console.error('Failed to refresh resources:', err));
+}, 30000);
+</script>

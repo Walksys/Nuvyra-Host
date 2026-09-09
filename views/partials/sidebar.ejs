@@ -1,4 +1,4 @@
-<%
+<% 
 const isAdmin = user && (user.role === 'admin' || user.root_admin);
 const hasVm = typeof vm !== 'undefined' && vm;
 const isAdminView = isAdmin && typeof page === 'string' && page.startsWith('admin');
@@ -20,8 +20,9 @@ const iconSettings = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
 const iconUser = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>';
 const iconUsers = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>';
 const iconActivity = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>';
+const iconResources = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18"/></svg>';
 const iconServer = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><path d="M6 6h.01M6 18h.01"/></svg>';
-const iconHome = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M9 22V12h6v10"/></svg>';
+const iconHome = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2 2z"/><path d="M9 22V12h6v10"/></svg>';
 const iconPalette = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="13.5" cy="6.5" r=".5"/><circle cx="17.5" cy="10.5" r=".5"/><circle cx="8.5" cy="7.5" r=".5"/><circle cx="6.5" cy="12.5" r=".5"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/></svg>';
 const iconLogout = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>';
 const iconShield = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>';
@@ -37,16 +38,17 @@ const iconLayers = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" s
     </div>
     <a href="/admin" class="nav-link <%= act('admin-dashboard', page) %>"><span class="v-icon"><%- iconHome %></span><span>Overview</span></a>
     <a href="/admin/servers" class="nav-link <%= act('admin-servers', page) %>"><span class="v-icon"><%- iconServer %></span><span>Virtual Machines</span></a>
-    <a href="/admin/nodes" class="nav-link <%= act('admin-nodes', page) %>"><span class="v-icon"><%- iconActivity %></span><span>Nodes &amp; Monitoring</span></a>
-    <a href="/admin/storage" class="nav-link <%= act('admin-storage', page) %>"><span class="v-icon"><%- iconFiles %></span><span>Storage &amp; ISOs</span></a>
-    <a href="/admin/network" class="nav-link <%= act('admin-network', page) %>"><span class="v-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1 4-10z"/></svg></span><span>Network &amp; Firewall</span></a>
+    <a href="/admin/resources" class="nav-link <%= act('admin-resources', page) %>"><span class="v-icon"><%- iconResources %></span><span>Resources</span></a>
+    <a href="/admin/nodes" class="nav-link <%= act('admin-nodes', page) %>"><span class="v-icon"><%- iconActivity %></span><span>Nodes & Monitoring</span></a>
+    <a href="/admin/storage" class="nav-link <%= act('admin-storage', page) %>"><span class="v-icon"><%- iconFiles %></span><span>Storage & ISOs</span></a>
+    <a href="/admin/network" class="nav-link <%= act('admin-network', page) %>"><span class="v-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1 4-10z"/></svg></span><span>Network & Firewall</span></a>
     <a href="/admin/mongodb" class="nav-link <%= act('admin-mongodb', page) %>"><span class="v-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg></span><span>MongoDB Studio</span></a>
-    <a href="/admin/users" class="nav-link <%= act('admin-users', page) %>"><span class="v-icon"><%- iconUsers %></span><span>User Management</span></a>
-    <a href="/admin/billing" class="nav-link <%= act('admin-billing', page) %>"><span class="v-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg></span><span>Billing &amp; Plans</span></a>
-    <a href="/admin/api" class="nav-link <%= act('admin-api', page) %>"><span class="v-icon"><%- iconKey %></span><span>API &amp; Webhooks</span></a>
-    <a href="/admin/plugins" class="nav-link <%= act('admin-plugins', page) %>"><span class="v-icon"><%- iconLayers %></span><span>Plugins &amp; Extensions</span></a>
-    <a href="/admin/audit" class="nav-link <%= act('admin-audit', page) %>"><span class="v-icon"><%- iconShield %></span><span>Audit &amp; Security</span></a>
-    <a href="/admin/settings" class="nav-link <%= act('admin-settings', page) %>"><span class="v-icon"><%- iconPalette %></span><span>Settings &amp; Themes</span></a>
+    <a href="/admin/users" class="nav-link <%= act('admin-users', page) %>" ><span class="v-icon"><%- iconUsers %></span><span>User Management</span></a>
+    <a href="/admin/billing" class="nav-link <%= act('admin-billing', page) %>" ><span class="v-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg></span><span>Billing & Plans</span></a>
+    <a href="/admin/api" class="nav-link <%= act('admin-api', page) %>" ><span class="v-icon"><%- iconKey %></span><span>API & Webhooks</span></a>
+    <a href="/admin/plugins" class="nav-link <%= act('admin-plugins', page) %>" ><span class="v-icon"><%- iconLayers %></span><span>Plugins & Extensions</span></a>
+    <a href="/admin/audit" class="nav-link <%= act('admin-audit', page) %>" ><span class="v-icon"><%- iconShield %></span><span>Audit & Security</span></a>
+    <a href="/admin/settings" class="nav-link <%= act('admin-settings', page) %>" ><span class="v-icon"><%- iconPalette %></span><span>Settings & Themes</span></a>
     <% const hasUpdateAvailable = settings && settings['update.available'] === '1'; %>
     <a href="/admin/updates" class="nav-link <%= act('admin-updates', page) %>" style="display:flex;align-items:center;justify-content:space-between">
       <div style="display:flex;align-items:center;gap:10px">
@@ -72,7 +74,7 @@ const iconLayers = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" s
     <%- vmNav(iconFiles, 'File Manager', 'files', page) %>
     <%- vmNav(iconBackups, 'Backups', 'backups', page) %>
     <%- vmNav(iconClock, 'Schedules', 'schedules', page) %>
-    <%- vmNav(iconRocket, 'Startup &amp; Boot', 'startup', page) %>
+    <%- vmNav(iconRocket, 'Startup & Boot', 'startup', page) %>
     <%- vmNav(iconUsers, 'Subusers', 'subusers', page) %>
     <%- vmNav(iconSettings, 'Settings', 'settings', page) %>
     <%- vmNav(iconActivity, 'Activity', 'activity', page) %>
