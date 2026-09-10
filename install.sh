@@ -79,19 +79,23 @@ do_install() {
   echo "================================================================="
   printf "${NC}\n"
 
+  # Ensure PATH includes npm / node global binary directory
+  export PATH="$PATH:$(npm config get prefix 2>/dev/null)/bin:/usr/local/bin:/usr/bin"
+
   # Step 1: System Packages
-  log_info "Step 1/7: Updating APT package repositories..."
+  log_info "Step 1/8: Updating APT package repositories..."
   export DEBIAN_FRONTEND=noninteractive
+  rm -f /etc/apt/sources.list.d/mongodb-org*.list 2>/dev/null || true
   apt-get update -y || true
 
-  log_info "Step 2/7: Installing core system dependencies & QEMU packages..."
+  log_info "Step 2/8: Installing core system dependencies & QEMU packages..."
   apt-get install -y --no-install-recommends \
     git curl wget openssl ca-certificates tar gzip iproute2 procps \
     build-essential python3 make g++ \
     qemu-system-x86 qemu-utils cloud-image-utils || true
 
-  # Step 2: Node.js 20 LTS Check
-  log_info "Step 3/7: Verifying Node.js 20 LTS environment..."
+  # Step 2: Node.js 18+ LTS Check
+  log_info "Step 3/8: Verifying Node.js 18+ LTS environment..."
   local install_node=0
   if ! command -v node >/dev/null 2>&1; then
     install_node=1
@@ -110,24 +114,8 @@ do_install() {
   fi
   log_ok "Node.js $(node -v) & NPM $(npm -v) ready"
 
-  # Step 3: MongoDB Installation Check
-  log_info "Step 4/7: Checking MongoDB installation..."
-  if ! command -v mongod >/dev/null 2>&1 && ! docker ps --filter "name=mongodb" --format "{{.Names}}" | grep -q mongodb; then
-    log_warn "MongoDB not found. Installing MongoDB server..."
-    
-# ===================================================
-docker run -d \
-  --name mongodb \
-  -p 27017:27017 \
-  -e MONGO_INITDB_ROOT_USERNAME=admin \
-  -e MONGO_INITDB_ROOT_PASSWORD=password \
-  mongo:latest
-
-
-# ===================================================
-
   # Step 3: KVM / No-KVM check
-  log_info "Step 4/7: Checking hardware virtualization (/dev/kvm)..."
+  log_info "Step 4/8: Checking hardware virtualization (/dev/kvm)..."
   if [ -e "/dev/kvm" ]; then
     chmod 666 /dev/kvm || true
     log_ok "KVM Hardware Acceleration detected (/dev/kvm)"
@@ -137,15 +125,11 @@ docker run -d \
   fi
 
   # Step 4: NPM Dependencies
-  log_info "Step 5/7: Installing NPM packages & building native binaries..."
+  log_info "Step 5/8: Installing NPM packages & building native binaries..."
   npm install --no-audit --no-fund
 
-  # Step 5: Initialize Application & Directories
-  log_info "Step 6/7: Initializing storage directories & database..."
-  mkdir -p data vms public/uploads/logo public/uploads/favicon public/uploads/background public/uploads/music public/uploads/avatar storage/backups storage/logs data/tmp
-  node scripts/build.js
-
-  # Setup .env
+  # Step 5: Configuration (.env)
+  log_info "Step 6/8: Setting up environment configuration (.env)..."
   if [ ! -f .env ]; then
     log_info "Generating secure .env configuration..."
     if [ -f .env.example ]; then
@@ -157,6 +141,7 @@ API_PORT=3002
 PANEL_URL=http://localhost:3001
 JWT_SECRET=
 JWT_EXPIRES=7d
+MONGO_URI=mongodb://admin:password@127.0.0.1:27017/vpanel?authSource=admin
 AUTO_PORT_MIN=25501
 AUTO_PORT_MAX=25600
 AUTO_VNC_PORT_MIN=25901
@@ -169,41 +154,178 @@ EOF
     local secret
     secret="$(openssl rand -hex 32)"
     sed -i "s|^JWT_SECRET=.*|JWT_SECRET=${secret}|" .env
+  else
+    log_info ".env already exists, preserving existing configuration."
   fi
 
-  # Step 6: Create Admin User
-  log_info "Step 7/7: Creating Administrator Account..."
-  echo ""
-  read -r -p "Enter Admin Username [default: admin]: " IN_USER
-  IN_USER="${IN_USER:-admin}"
+  # Step 6: MongoDB Installation & Verification
+  log_info "Step 7/8: Checking MongoDB service & database connection..."
+  local mongo_ready=0
 
-  read -r -p "Enter Admin Email [default: admin@vpanel.local]: " IN_EMAIL
-  IN_EMAIL="${IN_EMAIL:-admin@vpanel.local}"
+  # Ensure docker-proxy is available at all standard paths (Ubuntu 24.04 / Debian / Codespaces compatibility)
+  local dproxy=""
+  dproxy=$(command -v docker-proxy 2>/dev/null || find /usr/bin /usr/sbin /usr/libexec -name "docker-proxy" 2>/dev/null | head -n 1 || true)
+  if [ -n "$dproxy" ]; then
+    mkdir -p /usr/libexec/docker
+    if [ ! -e /usr/libexec/docker/docker-proxy ]; then
+      ln -sf "$dproxy" /usr/libexec/docker/docker-proxy 2>/dev/null || true
+    fi
+    if [ ! -e /usr/bin/docker-proxy ]; then
+      ln -sf "$dproxy" /usr/bin/docker-proxy 2>/dev/null || true
+    fi
+  fi
 
-  read -r -s -p "Enter Admin Password [default: generate secure]: " IN_PASS
-  echo ""
+  if node -e "require('dotenv').config(); const { MongoClient } = require('mongodb'); const uri = process.env.MONGO_URI || 'mongodb://admin:password@127.0.0.1:27017/vpanel?authSource=admin'; const c = new MongoClient(uri, { serverSelectionTimeoutMS: 2000 }); c.connect().then(() => { c.close(); process.exit(0); }).catch(() => process.exit(1));" >/dev/null 2>&1; then
+    log_ok "MongoDB is already reachable and authenticated."
+    mongo_ready=1
+  fi
+
+  if [ "$mongo_ready" -eq 0 ]; then
+    if ! command -v docker >/dev/null 2>&1 && ! command -v mongod >/dev/null 2>&1; then
+      log_info "Installing Docker engine for containerized MongoDB..."
+      apt-get install -y --no-install-recommends docker.io || true
+      systemctl start docker 2>/dev/null || service docker start 2>/dev/null || true
+    fi
+
+    if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
+      if docker ps --filter "name=mongodb" --format "{{.Names}}" | grep -q "^mongodb$"; then
+        log_ok "MongoDB Docker container is already running."
+      elif docker ps -a --filter "name=mongodb" --format "{{.Names}}" | grep -q "^mongodb$"; then
+        log_info "Starting existing MongoDB Docker container..."
+        if ! docker start mongodb 2>/dev/null; then
+          log_warn "Failed to restart existing container, recreating..."
+          docker rm -f mongodb >/dev/null 2>&1 || true
+          docker run -d \
+            --name mongodb \
+            -p 27017:27017 \
+            -e MONGO_INITDB_ROOT_USERNAME=admin \
+            -e MONGO_INITDB_ROOT_PASSWORD=password \
+            -v mongodb_data:/data/db \
+            --restart unless-stopped \
+            mongo:latest
+        fi
+      else
+        log_info "Deploying MongoDB server container via Docker..."
+        docker rm -f mongodb >/dev/null 2>&1 || true
+        docker run -d \
+          --name mongodb \
+          -p 27017:27017 \
+          -e MONGO_INITDB_ROOT_USERNAME=admin \
+          -e MONGO_INITDB_ROOT_PASSWORD=password \
+          -v mongodb_data:/data/db \
+          --restart unless-stopped \
+          mongo:latest
+      fi
+    elif command -v mongod >/dev/null 2>&1; then
+      log_info "Starting native MongoDB service..."
+      systemctl start mongod 2>/dev/null || systemctl start mongodb 2>/dev/null || service mongodb start 2>/dev/null || true
+    else
+      log_warn "Neither Docker nor mongod is running. Attempting to start Docker service..."
+      systemctl start docker 2>/dev/null || service docker start 2>/dev/null || true
+      if docker info >/dev/null 2>&1; then
+        docker rm -f mongodb >/dev/null 2>&1 || true
+        docker run -d \
+          --name mongodb \
+          -p 27017:27017 \
+          -e MONGO_INITDB_ROOT_USERNAME=admin \
+          -e MONGO_INITDB_ROOT_PASSWORD=password \
+          -v mongodb_data:/data/db \
+          --restart unless-stopped \
+          mongo:latest
+      fi
+    fi
+
+    # Wait up to 30s for MongoDB to accept connections
+    log_info "Waiting for MongoDB to become ready..."
+    local attempts=0
+    while [ $attempts -lt 30 ]; do
+      if node -e "require('dotenv').config(); const { MongoClient } = require('mongodb'); const uri = process.env.MONGO_URI || 'mongodb://admin:password@127.0.0.1:27017/vpanel?authSource=admin'; const c = new MongoClient(uri, { serverSelectionTimeoutMS: 1500 }); c.connect().then(() => { c.close(); process.exit(0); }).catch(() => process.exit(1));" >/dev/null 2>&1; then
+        mongo_ready=1
+        log_ok "MongoDB server is online and ready."
+        break
+      fi
+      sleep 1
+      attempts=$((attempts + 1))
+    done
+
+    if [ "$mongo_ready" -eq 0 ]; then
+      log_warn "Could not verify MongoDB connection automatically within 30s. Please verify MONGO_URI in .env."
+    fi
+  fi
+
+  # Step 7: Initialize Application & Directories
+  log_info "Initializing storage directories & building assets..."
+  mkdir -p data vms public/uploads/logo public/uploads/favicon public/uploads/background public/uploads/music public/uploads/avatar storage/backups storage/logs data/tmp
+  node scripts/build.js
+
+  # Step 8: Administrator Account
+  log_info "Step 8/8: Creating Administrator Account..."
+  local IN_USER="${ADMIN_USER:-admin}"
+  local IN_EMAIL="${ADMIN_EMAIL:-admin@vpanel.local}"
+  local IN_PASS="${ADMIN_PASS:-}"
+
+  if [ -t 0 ] && [ "$NON_INTERACTIVE" -eq 0 ] && [ -z "$ADMIN_PASS" ]; then
+    echo ""
+    read -r -p "Enter Admin Username [default: ${IN_USER}]: " INPUT_USER
+    IN_USER="${INPUT_USER:-$IN_USER}"
+
+    read -r -p "Enter Admin Email [default: ${IN_EMAIL}]: " INPUT_EMAIL
+    IN_EMAIL="${INPUT_EMAIL:-$IN_EMAIL}"
+
+    read -r -s -p "Enter Admin Password [default: generate secure]: " INPUT_PASS
+    echo ""
+    IN_PASS="${INPUT_PASS:-}"
+  fi
+
   if [ -z "$IN_PASS" ]; then
     IN_PASS="$(openssl rand -hex 6)"
     log_warn "Generated secure admin password: ${IN_PASS}"
   fi
 
+  log_info "Provisioning Administrator account '${IN_USER}' in database..."
   CREATEUSER_USERNAME="$IN_USER" \
   CREATEUSER_EMAIL="$IN_EMAIL" \
   CREATEUSER_PASSWORD="$IN_PASS" \
+  CREATEUSER_NAME="$IN_USER" \
   CREATEUSER_ROLE=admin \
-  node scripts/createuser.js >/dev/null 2>&1 || true
+  node -e "
+    const auth = require('./src/services/authService');
+    const { initDb, closeDb, collections } = require('./src/lib/db');
+    const username = process.env.CREATEUSER_USERNAME;
+    const email = process.env.CREATEUSER_EMAIL;
+    const password = process.env.CREATEUSER_PASSWORD;
+    const name = process.env.CREATEUSER_NAME || username;
 
-  # Step 7: Setup PM2 Daemon
-  if ! command -v pm2 >/dev/null 2>&1; then
-    log_info "Installing PM2 Process Manager globally..."
-    npm install -g pm2 --no-audit --no-fund
+    (async () => {
+      await initDb();
+      const existing = await collections.users.findOne({ \$or: [{ username }, { email }] });
+      if (existing) {
+        await auth.updateUser(existing.id, { password, role: 'admin', root_admin: 1, suspended: 0, verified: 1 });
+        console.log('[✔] Administrator user ' + username + ' password updated and promoted to Root Admin.');
+      } else {
+        const u = await auth.createUser({ username, email, password, name, role: 'admin', verified: 1 });
+        await collections.users.updateOne({ id: u.id }, { \$set: { root_admin: 1 } });
+        console.log('[✔] Administrator user ' + username + ' created successfully.');
+      }
+      await closeDb();
+    })().catch((err) => { console.error('[✖] Admin setup error: ' + err.message); process.exit(1); });
+  "
+
+  # Step 9: Setup PM2 Daemon
+  if [ "$USE_PM2" -eq 1 ]; then
+    if ! command -v pm2 >/dev/null 2>&1; then
+      log_info "Installing PM2 Process Manager globally..."
+      npm install -g pm2 --no-audit --no-fund
+    fi
+
+    log_info "Starting vPanel Pro cluster with PM2..."
+    pm2 delete vpanel >/dev/null 2>&1 || true
+    pm2 start ecosystem.config.js || pm2 start src/server.js --name vpanel
+    pm2 save
+    pm2 startup systemd -u root --hp /root >/dev/null 2>&1 || true
+  else
+    log_info "PM2 skipped (--no-pm2). Start manually with: npm start"
   fi
-
-  log_info "Starting vPanel Pro cluster with PM2..."
-  pm2 delete vpanel >/dev/null 2>&1 || true
-  pm2 start ecosystem.config.js || pm2 start src/server.js --name vpanel
-  pm2 save
-  pm2 startup systemd -u root --hp /root >/dev/null 2>&1 || true
 
   local s_ip
   s_ip=$(get_server_ip)
@@ -220,13 +342,17 @@ EOF
   echo "  🔑 Admin Password:   ${IN_PASS}"
   echo "  📧 Admin Email:      ${IN_EMAIL}"
   echo ""
-  echo "  ⚙️  PM2 Process:      pm2 status | pm2 logs vpanel"
+  if [ "$USE_PM2" -eq 1 ]; then
+    echo "  ⚙️  PM2 Process:      pm2 status | pm2 logs vpanel"
+  else
+    echo "  ⚙️  Run Server:      npm start"
+  fi
   echo "================================================================="
   echo ""
 }
 
 # =============================================================================
-# 2. CREATE / RESET ADMIN USER (usercrate admin)
+# 2. CREATE / RESET ADMIN USER (user create admin)
 # =============================================================================
 do_create_user() {
   safe_clear
@@ -236,21 +362,41 @@ do_create_user() {
   echo "================================================================="
   printf "${NC}\n"
 
-  read -r -p "Enter Username [default: admin]: " A_USER
-  A_USER="${A_USER:-admin}"
+  export PATH="$PATH:$(npm config get prefix 2>/dev/null)/bin:/usr/local/bin:/usr/bin"
 
-  read -r -p "Enter Email [default: ${A_USER}@vpanel.local]: " A_EMAIL
-  A_EMAIL="${A_EMAIL:-${A_USER}@vpanel.local}"
+  local A_USER="${ADMIN_USER:-admin}"
+  local A_EMAIL="${ADMIN_EMAIL:-}"
+  local A_NAME="${ADMIN_NAME:-Administrator}"
+  local A_PASS="${ADMIN_PASS:-}"
 
-  read -r -p "Enter Display Name [default: Administrator]: " A_NAME
-  A_NAME="${A_NAME:-Administrator}"
+  if [ -t 0 ] && [ "$NON_INTERACTIVE" -eq 0 ] && [ -z "$ADMIN_PASS" ]; then
+    read -r -p "Enter Username [default: ${A_USER}]: " INPUT_USER
+    A_USER="${INPUT_USER:-$A_USER}"
 
-  read -r -s -p "Enter Password: " A_PASS
-  echo ""
-  while [ -z "$A_PASS" ]; do
-    read -r -s -p "Password cannot be empty. Please enter password: " A_PASS
+    local DEF_EMAIL="${A_USER}@vpanel.local"
+    read -r -p "Enter Email [default: ${A_EMAIL:-$DEF_EMAIL}]: " INPUT_EMAIL
+    A_EMAIL="${INPUT_EMAIL:-${A_EMAIL:-$DEF_EMAIL}}"
+
+    read -r -p "Enter Display Name [default: ${A_NAME}]: " INPUT_NAME
+    A_NAME="${INPUT_NAME:-$A_NAME}"
+
+    read -r -s -p "Enter Password: " INPUT_PASS
     echo ""
-  done
+    while [ -z "$INPUT_PASS" ]; do
+      read -r -s -p "Password cannot be empty. Please enter password: " INPUT_PASS
+      echo ""
+    done
+    A_PASS="$INPUT_PASS"
+  fi
+
+  if [ -z "$A_EMAIL" ]; then
+    A_EMAIL="${A_USER}@vpanel.local"
+  fi
+
+  if [ -z "$A_PASS" ]; then
+    A_PASS="$(openssl rand -hex 6)"
+    log_warn "Generated secure admin password: ${A_PASS}"
+  fi
 
   log_info "Provisioning Administrator account '${A_USER}' in database..."
 
@@ -279,10 +425,13 @@ do_create_user() {
         console.log('[✔] Administrator user ' + username + ' created successfully.');
       }
       await closeDb();
-    })().catch((err) => { console.error(err); process.exit(1); });
+    })().catch((err) => { console.error('[✖] Error: ' + err.message); process.exit(1); });
   "
 
   log_ok "Administrator account '${A_USER}' is ready for login."
+  echo "  👤 Username: ${A_USER}"
+  echo "  🔑 Password: ${A_PASS}"
+  echo "  📧 Email:    ${A_EMAIL}"
   echo ""
 }
 
@@ -296,6 +445,8 @@ do_update() {
   echo "                   🔄 Updating vPanel Pro                        "
   echo "================================================================="
   printf "${NC}\n"
+
+  export PATH="$PATH:$(npm config get prefix 2>/dev/null)/bin:/usr/local/bin:/usr/bin"
 
   if [ -d ".git" ]; then
     log_info "Fetching latest updates from git repository..."
@@ -321,9 +472,10 @@ do_update() {
 }
 
 # =============================================================================
-# 4. PM2 MANAGEMENT (pm2 mang)
+# 4. PM2 MANAGEMENT
 # =============================================================================
 do_pm2_menu() {
+  export PATH="$PATH:$(npm config get prefix 2>/dev/null)/bin:/usr/local/bin:/usr/bin"
   while true; do
     safe_clear
     printf "${MAGENTA}${BOLD}"
@@ -406,14 +558,18 @@ do_uninstall() {
   echo "================================================================="
   printf "${NC}\n"
 
-  read -r -p "Are you sure you want to completely uninstall vPanel Pro? (y/N): " CONFIRM
-  if [[ "$CONFIRM" != "y" && "$CONFIRM" != "Y" ]]; then
-    log_info "Uninstall aborted."
-    return
-  fi
+  if [ "$NON_INTERACTIVE" -eq 0 ]; then
+    read -r -p "Are you sure you want to completely uninstall vPanel Pro? (y/N): " CONFIRM
+    if [[ "$CONFIRM" != "y" && "$CONFIRM" != "Y" ]]; then
+      log_info "Uninstall aborted."
+      return
+    fi
 
-  read -r -p "Do you want to KEEP your VM disks and database data? [Y/n]: " KEEP_DATA
-  KEEP_DATA="${KEEP_DATA:-Y}"
+    read -r -p "Do you want to KEEP your VM disks and database data? [Y/n]: " KEEP_DATA
+    KEEP_DATA="${KEEP_DATA:-Y}"
+  else
+    KEEP_DATA="Y"
+  fi
 
   log_info "Stopping and removing PM2 daemon process..."
   if command -v pm2 >/dev/null 2>&1; then
@@ -424,7 +580,15 @@ do_uninstall() {
 
   if [[ "$KEEP_DATA" == "n" || "$KEEP_DATA" == "N" ]]; then
     log_info "Removing all data, VMs, and uploads..."
-    rm -rf data/vpanel.db data/tmp vms/* public/uploads/logo/* public/uploads/favicon/* public/uploads/background/*
+    rm -rf data/tmp vms/* public/uploads/logo/* public/uploads/favicon/* public/uploads/background/* public/uploads/music/* public/uploads/avatar/*
+    if command -v docker >/dev/null 2>&1; then
+      if docker ps -a --format "{{.Names}}" | grep -q "^mongodb$"; then
+        log_info "Removing MongoDB Docker container and volume..."
+        docker stop mongodb >/dev/null 2>&1 || true
+        docker rm mongodb >/dev/null 2>&1 || true
+        docker volume rm mongodb_data >/dev/null 2>&1 || true
+      fi
+    fi
   else
     log_info "Preserving database and VM disks."
   fi
@@ -447,9 +611,9 @@ show_menu() {
     printf "${NC}"
     echo ""
     echo "  [1] 🚀 1. Install (Full automated install for Debian/Ubuntu)"
-    echo "  [2] 👤 2. User Create Admin (usercrate admin)"
+    echo "  [2] 👤 2. User Create Admin (Create or reset admin account)"
     echo "  [3] 🔄 3. Update (Pull updates, rebuild & zero-downtime reload)"
-    echo "  [4] ⚙️  4. PM2 Management (pm2 mang - restart, logs, boot startup)"
+    echo "  [4] ⚙️  4. PM2 Management (Restart, logs, boot startup)"
     echo "  [5] 🗑️  5. Uninstall (Safe uninstall wizard)"
     echo "  [0] 🚪 0. Exit"
     echo ""
@@ -492,15 +656,93 @@ show_menu() {
 check_root
 detect_os
 
-# If arguments were passed directly (e.g. --install or --create-admin)
-if [ $# -gt 0 ]; then
+ACTION=""
+USE_PM2=1
+NON_INTERACTIVE=0
+ADMIN_USER="${ADMIN_USERNAME:-${ADMIN_USER:-}}"
+ADMIN_EMAIL="${ADMIN_EMAIL:-}"
+ADMIN_PASS="${ADMIN_PASSWORD:-${ADMIN_PASS:-}}"
+
+while [ $# -gt 0 ]; do
   case "$1" in
-    1|--install|install) do_install ;;
-    2|--usercrate|--create-admin|createuser) do_create_user ;;
-    3|--update|update) do_update ;;
-    4|--pm2|pm2) do_pm2_menu ;;
-    5|--uninstall|uninstall) do_uninstall ;;
-    *) show_menu ;;
+    1|--install|install)
+      ACTION="install"
+      ;;
+    2|--create-admin|--create-user|createuser|usercreate|--usercrate)
+      ACTION="create_user"
+      ;;
+    3|--update|update)
+      ACTION="update"
+      ;;
+    4|--pm2|pm2)
+      ACTION="pm2"
+      ;;
+    5|--uninstall|uninstall)
+      ACTION="uninstall"
+      ;;
+    --admin-user|--user|-u)
+      shift
+      ADMIN_USER="${1:-}"
+      ACTION="${ACTION:-install}"
+      ;;
+    --admin-email|--email|-e)
+      shift
+      ADMIN_EMAIL="${1:-}"
+      ACTION="${ACTION:-install}"
+      ;;
+    --admin-pass|--password|-p)
+      shift
+      ADMIN_PASS="${1:-}"
+      ACTION="${ACTION:-install}"
+      ;;
+    --no-pm2)
+      USE_PM2=0
+      ;;
+    -y|--yes|--non-interactive)
+      NON_INTERACTIVE=1
+      ;;
+    --branch)
+      shift
+      BRANCH="${1:-}"
+      if [ -n "$BRANCH" ]; then
+        log_info "Switching to branch: $BRANCH"
+        git fetch --all || true
+        git checkout "$BRANCH" || git checkout -B "$BRANCH" origin/"$BRANCH" || true
+      fi
+      ;;
+    -h|--help)
+      echo "Usage: sudo bash install.sh [action] [options]"
+      echo ""
+      echo "Actions:"
+      echo "  1, install, --install           Full automated installation"
+      echo "  2, createuser, --create-admin   Create or reset admin account"
+      echo "  3, update, --update             Pull updates and rebuild"
+      echo "  4, pm2, --pm2                   PM2 cluster management menu"
+      echo "  5, uninstall, --uninstall       Uninstall vPanel Pro"
+      echo ""
+      echo "Options:"
+      echo "  --admin-user <user>             Admin username (default: admin)"
+      echo "  --admin-email <email>           Admin email (default: admin@vpanel.local)"
+      echo "  --admin-pass <pass>             Admin password (default: random secure)"
+      echo "  --no-pm2                        Skip PM2 process manager"
+      echo "  -y, --non-interactive           Run without interactive prompts"
+      echo "  -h, --help                      Show this help message"
+      exit 0
+      ;;
+    *)
+      log_warn "Unknown option: $1"
+      ;;
+  esac
+  shift
+done
+
+if [ -n "$ACTION" ]; then
+  case "$ACTION" in
+    install)     do_install ;;
+    create_user) do_create_user ;;
+    update)      do_update ;;
+    pm2)         do_pm2_menu ;;
+    uninstall)   do_uninstall ;;
   esac
 else
   show_menu
