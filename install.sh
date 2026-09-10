@@ -115,26 +115,16 @@ do_install() {
   if ! command -v mongod >/dev/null 2>&1 && ! docker ps --filter "name=mongodb" --format "{{.Names}}" | grep -q mongodb; then
     log_warn "MongoDB not found. Installing MongoDB server..."
     
-    # Try to install MongoDB from Ubuntu repositories first
-    if apt-get install -y mongodb-server mongodb-clients; then
-      log_ok "MongoDB installed successfully from Ubuntu repositories"
-    else
-      log_warn "Failed to install MongoDB from Ubuntu repositories. Trying MongoDB official repository..."
-      
-      # Add MongoDB official repository
-      wget -qO - https://www.mongodb.org/static/pgp/server-7.0.asc | apt-key add -
-      echo "deb [ arch=amd64,arm64 ] https://repo.mongodb.org/apt/ubuntu $(lsb_release -cs)/mongodb-org/7.0 multiverse" | tee /etc/apt/sources.list.d/mongodb-org-7.0.list
-      apt-get update
-      apt-get install -y mongodb-org
-      
-      # Start MongoDB service
-      systemctl start mongod
-      systemctl enable mongod
-      log_ok "MongoDB installed and started from official repository"
-    fi
-  else
-    log_ok "MongoDB server detected or Docker container running"
-  fi
+# ===================================================
+docker run -d \
+  --name mongodb \
+  -p 27017:27017 \
+  -e MONGO_INITDB_ROOT_USERNAME=admin \
+  -e MONGO_INITDB_ROOT_PASSWORD=password \
+  mongo:latest
+
+
+# ===================================================
 
   # Step 3: KVM / No-KVM check
   log_info "Step 4/7: Checking hardware virtualization (/dev/kvm)..."
