@@ -1,6 +1,6 @@
 <div align="center">
 
-# ⚡ vPanel Pro v3.0
+# ⚡ vPanel Pro v3.1.1
 ### Enterprise-Grade QEMU/KVM Virtualization & Server Management Platform
 
 [![Node.js](https://img.shields.io/badge/Node.js-v18+-339933?style=for-the-badge&logo=nodedotjs&logoColor=white)](https://nodejs.org)
@@ -15,11 +15,16 @@
 
 </div>
 
-## 🌟 What's New in vPanel Pro v3.0
+## 🌟 What's New in vPanel Pro v3.1.1
 
+- 🛠️ **Cross-Platform Installer Suite (`install.sh`)**: Automated installation with auto-resolution of `docker-proxy` for Ubuntu 24.04 (Noble), Debian 11–13, Docker CE, and devcontainers. Includes unattended CLI flags (`--admin-user`, `--admin-pass`, `--no-pm2`, `-y`).
+- 🖥️ **Default Terminal Size (169×33)**: SSH console defaults to 169 columns × 33 rows with quick-reset toolbar actions and geometry persistence.
+- ⚡ **Multi-Session SSH with 24/7 Persistence**: Run and toggle concurrent SSH terminal tabs without losing connection state when navigating between console tabs.
+- 🖱️ **noVNC Graphical Desktop Console**: Low-latency HTML5 remote framebuffer console for QEMU guests via WebSocket proxy (`/vncws/:id`) with Ctrl+Alt+Del dispatcher.
+- 💿 **OS Templates Studio**: 1-click cloud-init synchronization for 16 templates from [nobita329/Template.git](https://github.com/nobita329/Template.git) (Ubuntu, Debian, Fedora, CentOS, AlmaLinux, Rocky Linux).
 - 👑 **Clean 2-Panel Architecture**: Strict UI segregation between the Administrative Control Plane (`/admin/*`) and the Tenant Server Management Panel (`/dashboard`).
 - 🗄️ **MongoDB Management Studio**: Integrated Mongo-Express style manager for databases, collections, documents, indexes, and raw MongoDB query console.
-- 💾 **Storage Pools & ISO Library**: Manage Local Directory, LVM Volume Groups, and NFS storage pools, plus 1-click cloud image downloads (Ubuntu 24.04, Debian 12, Alpine Linux, Windows Server).
+- 💾 **Storage Pools & ISO Library**: Manage Local Directory, LVM Volume Groups, and NFS storage pools, plus 1-click cloud image downloads.
 - 🌐 **Virtual Network & Firewall**: Host bridge interface discovery (`br0`, `virbr0`), IP CIDR subnet pools with lease tracking, NAT port forwarding, and virtual firewall rules (`ALLOW`/`DROP`).
 - ⚡ **API Keys & Webhooks**: Scoped REST API keys (`vp_live_...`) and outgoing event webhooks with HMAC-SHA256 signatures.
 - 🧩 **Event-Driven Plugins**: Native event dispatchers for **Discord Rich Embeds**, **Telegram Bot Alerts**, and custom HTTP POST webhooks.
@@ -105,9 +110,27 @@
 git clone https://github.com/nobita329/vpanel-pro.git
 cd vpanel-pro
 
-# Run the automated installer
-sudo bash install.sh --admin-pass 'your_secure_password'
+# Interactive installation menu
+sudo bash install.sh
+
+# Or 1-line unattended install
+sudo bash install.sh --install -y --admin-user admin --admin-email admin@vpanel.local --admin-pass 'your_secure_password'
 ```
+
+#### Installer CLI Options:
+| Flag | Description | Default |
+| :--- | :--- | :--- |
+| `1`, `--install` | Full automated Debian/Ubuntu installation | - |
+| `2`, `--create-admin` | Create or reset administrator account | - |
+| `3`, `--update` | Pull latest updates and zero-downtime reload | - |
+| `4`, `--pm2` | PM2 cluster management menu | - |
+| `5`, `--uninstall` | Safe uninstaller wizard | - |
+| `--admin-user <user>` | Administrator username | `admin` |
+| `--admin-email <email>`| Administrator email address | `admin@vpanel.local` |
+| `--admin-pass <pass>` | Administrator password | Generated random |
+| `--no-pm2` | Skip PM2 daemon setup | `0` |
+| `-y`, `--non-interactive` | Run without interactive prompts | `0` |
+| `-h`, `--help` | Display usage instructions | - |
 
 ### Option 2: Manual Installation
 
@@ -145,8 +168,9 @@ pm2 startup
 | Service | Default URL | Description |
 | :--- | :--- | :--- |
 | **Web Panel** | `http://<host_ip>:3001` | Main user dashboard and management interface |
-| **REST API** | `http://<host_ip>:3001/api` | RESTful API for automation & integrations |
+| **REST API** | `http://<host_ip>:3002/api` | RESTful API & Socket.IO telemetry engine |
 | **VM Port Range** | `25501 - 25600` | Dynamic host-forwarded SSH ports |
+| **noVNC Console Range** | `25901 - 26000` | Dynamic host-forwarded VNC desktop ports |
 | **Agent Port Range**| `26101 - 26200` | Internal guest-daemon communication |
 
 ---
@@ -157,20 +181,25 @@ pm2 startup
 # Panel Ports & Server
 PANEL_PORT=3001
 API_PORT=3002
+PANEL_URL=http://localhost:3001
 NODE_ENV=production
 
 # Security & Secrets
 JWT_SECRET=your_super_secret_jwt_key_here
+JWT_EXPIRES=7d
 ALLOW_REGISTER=1
-FORCE_TFA=0
+
+# MongoDB Connection URI
+MONGO_URI=mongodb://admin:password@127.0.0.1:27017/vpanel?authSource=admin
 
 # Storage Locations
 VM_DIR=./vms
-DB_PATH=./data/vpanel.db
 
 # Automatic Port Forwarding Ranges
 AUTO_PORT_MIN=25501
 AUTO_PORT_MAX=25600
+AUTO_VNC_PORT_MIN=25901
+AUTO_VNC_PORT_MAX=26000
 AUTO_AGENT_PORT_MIN=26101
 AUTO_AGENT_PORT_MAX=26200
 ```
