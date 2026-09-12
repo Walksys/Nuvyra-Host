@@ -213,7 +213,7 @@ async function resetPassword(token, newPassword) {
 }
 
 async function setupTfa(user) {
-  const secret = speakeasy.generateSecret({ length: 20, name: `${settings.get('panel.name') || 'vpanel'} (${user.username})` });
+  const secret = speakeasy.generateSecret({ length: 20, name: `${settings.get('panel.name') || 'nuvyra'} (${user.username})` });
   await collections.users.updateOne({ id: user.id }, { $set: { tfa_secret: secret.base32 } });
   return { secret: secret.base32, otpauth_url: secret.otpauth_url };
 }

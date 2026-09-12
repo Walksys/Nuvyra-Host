@@ -4,7 +4,7 @@ version: '3.8'
 # Usage: docker compose -f docker-compose.yml -f docker-compose.kvm.yml up -d
 
 services:
-  vpanel:
+  nuvyra:
     environment:
       - NO_KVM=0
     devices:

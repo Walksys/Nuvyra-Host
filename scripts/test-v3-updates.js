@@ -1,5 +1,5 @@
 /**
- * Automated Test Suite for vPanel Pro v3 Pterodactyl-Style Update System
+ * Automated Test Suite for Nuvyra v3 Pterodactyl-Style Update System
  */
 
 const assert = require('assert');
@@ -40,7 +40,7 @@ async function itAsync(desc, fn) {
 
 async function run() {
   console.log('======================================================');
-  console.log('  TESTING vPANEL PRO v3 SYSTEM UPDATE CENTER         ');
+  console.log('  TESTING Nuvyra v3 SYSTEM UPDATE CENTER         ');
   console.log('======================================================\n');
 
   await initDb();
@@ -187,7 +187,7 @@ async function run() {
 
   // Summary
   console.log('\n======================================================');
-  console.log(`  vPANEL PRO v3 UPDATES TEST RESULTS: ${passed} PASSED, ${failed} FAILED`);
+  console.log(`  Nuvyra v3 UPDATES TEST RESULTS: ${passed} PASSED, ${failed} FAILED`);
   console.log('======================================================');
 
   if (failed > 0) process.exit(1);

@@ -86,13 +86,13 @@ class ApiManagerService {
     const payload = {
       event: 'test:ping',
       timestamp: new Date().toISOString(),
-      message: 'vPanel Pro Webhook Connectivity Verification',
+      message: 'Nuvyra Webhook Connectivity Verification',
     };
     const bodyStr = JSON.stringify(payload);
     const headers = { 'Content-Type': 'application/json' };
     if (hook.secret) {
       const sig = crypto.createHmac('sha256', hook.secret).update(bodyStr).digest('hex');
-      headers['X-VPanel-Signature'] = `sha256=${sig}`;
+      headers['X-Nuvyra-Signature'] = `sha256=${sig}`;
     }
 
     const t0 = Date.now();

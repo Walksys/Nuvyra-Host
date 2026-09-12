@@ -21,7 +21,7 @@ function execPromise(cmd, options = {}) {
 
 function fetchJsonUrl(url) {
   return new Promise((resolve, reject) => {
-    https.get(url, { headers: { "User-Agent": "vPanel-Pro-TemplateSync/3.0" } }, (res) => {
+    https.get(url, { headers: { "User-Agent": "Nuvyra-TemplateSync/3.0" } }, (res) => {
       if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
         return fetchJsonUrl(res.headers.location).then(resolve).catch(reject);
       }

@@ -9,7 +9,7 @@ const BASE_WEB = 'http://127.0.0.1:3001';
 
 async function run() {
   console.log('======================================================');
-  console.log('       TESTING vPANEL PRO v3 PLATFORM ARCHITECTURE    ');
+  console.log('       TESTING Nuvyra v3 PLATFORM ARCHITECTURE    ');
   console.log('======================================================');
 
   await initDb();
@@ -196,7 +196,7 @@ async function run() {
     assert(updatePluginRes.status === 200 && updatePluginRes.data.ok === true, 'Updated Discord plugin configuration');
 
     console.log('\n======================================================');
-    console.log(`  vPANEL PRO v3 TEST RESULTS: ${passed} PASSED, ${failed} FAILED`);
+    console.log(`  Nuvyra v3 TEST RESULTS: ${passed} PASSED, ${failed} FAILED`);
     console.log('======================================================');
 
     await closeDb();

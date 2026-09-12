@@ -18,7 +18,7 @@ const auth = require('../src/services/authService');
 
   // Create a default resource user if it doesn't exist
   const resourceUsername = 'resource';
-  const resourceEmail = 'resource@vpanel.local';
+  const resourceEmail = 'resource@nuvyra.local';
   const resourcePassword = 'ResourcePass123!'; // In a real scenario, this should be generated and displayed
   const resourceName = 'Resource User';
 

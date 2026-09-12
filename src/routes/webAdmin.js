@@ -298,7 +298,7 @@ router.post('/admin/users/:id/impersonate', async (req, res) => {
 
     const userToken = authService.generateToken(target);
 
-    res.cookie('vpanel_impersonate_admin', adminToken, {
+    res.cookie('nuvyra_impersonate_admin', adminToken, {
       httpOnly: true,
       secure: false,
       sameSite: 'lax',

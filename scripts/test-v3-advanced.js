@@ -1,5 +1,5 @@
 /**
- * Automated Test Suite for vPanel Pro v3 Advanced Capabilities
+ * Automated Test Suite for Nuvyra v3 Advanced Capabilities
  * - Global Command Palette
  * - User Impersonation & Floating Revert Banner
  * - AI Assistant & Boot Log Explainer
@@ -43,7 +43,7 @@ async function itAsync(desc, fn) {
 
 async function run() {
   console.log('======================================================');
-  console.log('  TESTING vPANEL PRO v3 ADVANCED CAPABILITIES');
+  console.log('  TESTING Nuvyra v3 ADVANCED CAPABILITIES');
   console.log('======================================================\n');
 
   await initDb();
@@ -92,7 +92,7 @@ async function run() {
       headers: {},
       cookies: {
         token: userToken,
-        vpanel_impersonate_admin: adminToken,
+        nuvyra_impersonate_admin: adminToken,
       },
       query: {},
     };
@@ -343,7 +343,7 @@ async function run() {
 
   // Summary
   console.log('\n======================================================');
-  console.log(`  vPANEL PRO v3 ADVANCED TEST RESULTS: ${passed} PASSED, ${failed} FAILED`);
+  console.log(`  Nuvyra v3 ADVANCED TEST RESULTS: ${passed} PASSED, ${failed} FAILED`);
   console.log('======================================================');
 
   if (failed > 0) {

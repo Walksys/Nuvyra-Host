@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-vpanel VM Agent - file management API for the vpanel panel.
+nuvyra VM Agent - file management API for the nuvyra panel.
 Runs inside the guest VM, listens on 127.0.0.1 / 0.0.0.0 and is reached by the
 panel through a QEMU user-networking hostfwd. Requires a bearer token stored in
-/etc/vpanel-agent.token.
+/etc/nuvyra-agent.token.
 """
 import os
 import sys
@@ -16,8 +16,8 @@ import grp
 import http.server
 import urllib.parse
 
-PORT = int(os.environ.get("VPANEL_AGENT_PORT", "9090"))
-TOKEN_FILE = "/etc/vpanel-agent.token"
+PORT = int(os.environ.get("Nuvyra_AGENT_PORT", "9090"))
+TOKEN_FILE = "/etc/nuvyra-agent.token"
 
 
 def load_token():
@@ -134,7 +134,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         one = lambda k: (q.get(k) or [""])[0]
         try:
             if u.path == "/ping":
-                return self._send(200, ok({"agent": "vpanel", "version": 1, "port": PORT}))
+                return self._send(200, ok({"agent": "nuvyra", "version": 1, "port": PORT}))
             if u.path == "/files":
                 return self._send(200, ok({"files": list_dir(one("path"))}))
             if u.path == "/read":
@@ -163,7 +163,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 parent = os.path.dirname(target)
                 if parent and not os.path.isdir(parent):
                     os.makedirs(parent, exist_ok=True)
-                tmp = target + ".vpanel-tmp"
+                tmp = target + ".nuvyra-tmp"
                 with open(tmp, "wb") as f:
                     f.write(data)
                 os.replace(tmp, target)
@@ -216,9 +216,9 @@ def main():
     try:
         server = ThreadingServer(("0.0.0.0", PORT), Handler)
     except OSError as e:
-        sys.stderr.write("vpanel-agent: bind failed: %s\n" % e)
+        sys.stderr.write("nuvyra-agent: bind failed: %s\n" % e)
         sys.exit(1)
-    sys.stderr.write("vpanel-agent: listening on 0.0.0.0:%d\n" % PORT)
+    sys.stderr.write("nuvyra-agent: listening on 0.0.0.0:%d\n" % PORT)
     sys.stderr.flush()
     server.serve_forever()
 

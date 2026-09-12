@@ -61,20 +61,20 @@ async function run() {
     const dbListRes = await axios.get(`${BASE_WEB}/admin/mongodb/api/databases`, { headers: authHeaders });
     assert(dbListRes.status === 200 && dbListRes.data.ok === true, 'GET /admin/mongodb/api/databases returns databases');
     const dbNames = (dbListRes.data.databases || []).map(d => d.name);
-    assert(dbNames.includes('vpanel'), 'Database list includes "vpanel"');
+    assert(dbNames.includes('nuvyra'), 'Database list includes "nuvyra"');
 
     // 4. Collection Lifecycle APIs
     console.log('\n>>> 4. Collection Lifecycle & Document Tests');
     const testColl = 'studio_test_' + Date.now();
     const createCollRes = await axios.post(`${BASE_WEB}/admin/mongodb/api/collections/create`, {
-      db: 'vpanel',
+      db: 'nuvyra',
       name: testColl
     }, { headers: authHeaders });
     assert(createCollRes.status === 200 && createCollRes.data.ok === true, `Create collection '${testColl}'`);
 
     // Insert document
     const insertRes = await axios.post(`${BASE_WEB}/admin/mongodb/api/documents/insert`, {
-      db: 'vpanel',
+      db: 'nuvyra',
       collection: testColl,
       document: { name: 'Studio Test Item', role: 'admin', active: true, score: 99 }
     }, { headers: authHeaders });
@@ -82,13 +82,13 @@ async function run() {
     const docId = insertRes.data.insertedId;
 
     // Get documents
-    const getDocsRes = await axios.get(`${BASE_WEB}/admin/mongodb/api/documents?db=vpanel&collection=${testColl}`, { headers: authHeaders });
+    const getDocsRes = await axios.get(`${BASE_WEB}/admin/mongodb/api/documents?db=nuvyra&collection=${testColl}`, { headers: authHeaders });
     assert(getDocsRes.status === 200 && getDocsRes.data.total === 1, 'GET /admin/mongodb/api/documents returned 1 document');
     assert(getDocsRes.data.documents[0].name === 'Studio Test Item', 'Document name matches');
 
     // Update document
     const updateRes = await axios.post(`${BASE_WEB}/admin/mongodb/api/documents/update`, {
-      db: 'vpanel',
+      db: 'nuvyra',
       collection: testColl,
       id: docId,
       document: { name: 'Studio Test Updated', score: 100 }
@@ -98,7 +98,7 @@ async function run() {
     // 5. Query Console API
     console.log('\n>>> 5. Query Console APIs');
     const queryFindRes = await axios.post(`${BASE_WEB}/admin/mongodb/api/query`, {
-      db: 'vpanel',
+      db: 'nuvyra',
       collection: testColl,
       type: 'find',
       payload: { filter: { score: 100 } }
@@ -107,7 +107,7 @@ async function run() {
     assert(Array.isArray(queryFindRes.data.result) && queryFindRes.data.result.length === 1, 'Query find returned updated item');
 
     const countRes = await axios.post(`${BASE_WEB}/admin/mongodb/api/query`, {
-      db: 'vpanel',
+      db: 'nuvyra',
       collection: testColl,
       type: 'countDocuments',
       payload: { filter: {} }
@@ -117,21 +117,21 @@ async function run() {
     // 6. Index Manager API
     console.log('\n>>> 6. Index Manager APIs');
     const createIndexRes = await axios.post(`${BASE_WEB}/admin/mongodb/api/indexes/create`, {
-      db: 'vpanel',
+      db: 'nuvyra',
       collection: testColl,
       keys: { score: 1 },
       options: { unique: false }
     }, { headers: authHeaders });
     assert(createIndexRes.status === 200 && createIndexRes.data.ok === true, `Created index: ${createIndexRes.data.indexName}`);
 
-    const listIdxRes = await axios.get(`${BASE_WEB}/admin/mongodb/api/indexes?db=vpanel&collection=${testColl}`, { headers: authHeaders });
+    const listIdxRes = await axios.get(`${BASE_WEB}/admin/mongodb/api/indexes?db=nuvyra&collection=${testColl}`, { headers: authHeaders });
     const idxNames = (listIdxRes.data.indexes || []).map(i => i.name);
     assert(idxNames.includes('score_1'), 'Index "score_1" exists in collection');
 
     // 7. Backup & Export API
     console.log('\n>>> 7. Backup & Export APIs');
     const exportRes = await axios.post(`${BASE_WEB}/admin/mongodb/api/backups/export`, {
-      db: 'vpanel',
+      db: 'nuvyra',
       collection: testColl
     }, { headers: authHeaders });
     assert(exportRes.status === 200 && exportRes.data.ok === true, `Exported collection to: ${exportRes.data.filename}`);
@@ -144,7 +144,7 @@ async function run() {
     console.log('\n>>> 8. Import / Restore APIs');
     const importColl = 'studio_restore_' + Date.now();
     const importRes = await axios.post(`${BASE_WEB}/admin/mongodb/api/backups/import`, {
-      db: 'vpanel',
+      db: 'nuvyra',
       collection: importColl,
       mode: 'append',
       data: JSON.stringify([
@@ -157,7 +157,7 @@ async function run() {
 
     // Cleanup restored collection
     await axios.post(`${BASE_WEB}/admin/mongodb/api/collections/drop`, {
-      db: 'vpanel',
+      db: 'nuvyra',
       name: importColl
     }, { headers: authHeaders });
 
@@ -170,22 +170,22 @@ async function run() {
 
     const testMongoUser = 'testuser_' + Date.now();
     const createUserRes = await axios.post(`${BASE_WEB}/admin/mongodb/api/users/create`, {
-      db: 'vpanel',
+      db: 'nuvyra',
       username: testMongoUser,
       password: 'StrongPassword123!',
-      roles: [{ role: 'readWrite', db: 'vpanel' }]
+      roles: [{ role: 'readWrite', db: 'nuvyra' }]
     }, { headers: authHeaders });
     assert(createUserRes.status === 200 && createUserRes.data.ok === true, `Created DB user '${testMongoUser}'`);
 
     const dropUserRes = await axios.post(`${BASE_WEB}/admin/mongodb/api/users/delete`, {
-      db: 'vpanel',
+      db: 'nuvyra',
       username: testMongoUser
     }, { headers: authHeaders });
     assert(dropUserRes.status === 200 && dropUserRes.data.ok === true, `Dropped DB user '${testMongoUser}'`);
 
     // Cleanup: drop test collection and delete backup
     await axios.post(`${BASE_WEB}/admin/mongodb/api/collections/drop`, {
-      db: 'vpanel',
+      db: 'nuvyra',
       name: testColl
     }, { headers: authHeaders });
 

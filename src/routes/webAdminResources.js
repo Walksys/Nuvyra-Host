@@ -29,7 +29,7 @@ router.get("/", async (req, res, next) => {
 
     const vms = rawVms.map(v => {
       const serialized = vmService.serializeVm(v);
-      serialized.owner = userMap[v.owner_id] || { username: "Admin", email: "admin@vpanel.local" };
+      serialized.owner = userMap[v.owner_id] || { username: "Admin", email: "admin@nuvyra.local" };
       serialized.isRunning = vmService.isRunning(v);
       return serialized;
     });

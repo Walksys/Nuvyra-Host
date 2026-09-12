@@ -313,15 +313,15 @@ async function download(url, dest) {
 }
 
 function agentSeedPayload(vm) {
-  const script = fs.readFileSync(path.join(config.root, 'scripts/vpanel-agent.py'), 'utf8');
+  const script = fs.readFileSync(path.join(config.root, 'scripts/nuvyra-agent.py'), 'utf8');
   const unit = [
     '[Unit]',
-    'Description=vPanel VM Agent',
+    'Description=Nuvyra VM Agent',
     'After=network.target',
     '',
     '[Service]',
     'Type=simple',
-    'ExecStart=/usr/local/bin/vpanel-agent',
+    'ExecStart=/usr/local/bin/nuvyra-agent',
     'Restart=on-failure',
     'RestartSec=3',
     '',
@@ -330,11 +330,11 @@ function agentSeedPayload(vm) {
   ].join('\n');
   const b64 = (s) => Buffer.from(s, 'utf8').toString('base64');
   return [
-    `echo '${b64(script)}' | base64 -d > /usr/local/bin/vpanel-agent && chmod 755 /usr/local/bin/vpanel-agent`,
-    `echo '${vm.agent_token}' > /etc/vpanel-agent.token && chmod 600 /etc/vpanel-agent.token`,
-    `printf '%s' '${b64(unit)}' | base64 -d > /etc/systemd/system/vpanel-agent.service`,
+    `echo '${b64(script)}' | base64 -d > /usr/local/bin/nuvyra-agent && chmod 755 /usr/local/bin/nuvyra-agent`,
+    `echo '${vm.agent_token}' > /etc/nuvyra-agent.token && chmod 600 /etc/nuvyra-agent.token`,
+    `printf '%s' '${b64(unit)}' | base64 -d > /etc/systemd/system/nuvyra-agent.service`,
     'systemctl daemon-reload || true',
-    'systemctl enable --now vpanel-agent 2>/dev/null || (nohup /usr/local/bin/vpanel-agent >/var/log/vpanel-agent.log 2>&1 &) || true',
+    'systemctl enable --now nuvyra-agent 2>/dev/null || (nohup /usr/local/bin/nuvyra-agent >/var/log/nuvyra-agent.log 2>&1 &) || true',
   ];
 }
 
@@ -362,7 +362,7 @@ chpasswd:
   expire: false
 package_update: true
 write_files:
-  - path: /etc/ssh/sshd_config.d/60-vpanel.conf
+  - path: /etc/ssh/sshd_config.d/60-nuvyra.conf
     owner: root:root
     permissions: '0644'
     content: |
@@ -399,7 +399,7 @@ async function create({ user, data }) {
 
   const hostname = String(data.hostname || vmName).replace(/\s+/g, '-');
   const username = String(data.username || osEntry[4] || 'root').toLowerCase();
-  const password = String(data.password || 'vpanel' + Math.random().toString(36).slice(2, 8));
+  const password = String(data.password || 'nuvyra' + Math.random().toString(36).slice(2, 8));
   const diskSize = String(data.disk_size || settings.get('vm.default_disk') || '20G').toUpperCase();
   const memory = parseInt(data.memory || settings.get('vm.default_memory') || '2048', 10);
   const cpus = parseInt(data.cpus || settings.get('vm.default_cpus') || '2', 10);
@@ -496,7 +496,7 @@ async function start(vm, { user = null } = {}) {
   await ensureAgentPort(vm);
   const dir = vmDir(vm);
   const bootLogPath = path.join(dir, 'boot.log');
-  const sessionHeader = `\r\n=== [vPanel] Starting VM "${vm.name}" at ${new Date().toISOString()} ===\r\n\r\n`;
+  const sessionHeader = `\r\n=== [Nuvyra] Starting VM "${vm.name}" at ${new Date().toISOString()} ===\r\n\r\n`;
   try {
     fs.appendFileSync(bootLogPath, sessionHeader, 'utf8');
   } catch (_) {}

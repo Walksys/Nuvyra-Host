@@ -122,29 +122,29 @@ router.get('/logout', async (req, res) => {
   const user = req.user;
   if (user) await activity.logActivity({ user_id: user.id, event: 'auth:logout', ip: req.ip });
   res.clearCookie('token');
-  res.clearCookie('vpanel_impersonate_admin');
+  res.clearCookie('nuvyra_impersonate_admin');
   res.redirect('/login');
 });
 
 router.all(['/auth/impersonate/revert', '/admin/users/impersonate/revert'], async (req, res) => {
   try {
-    const adminToken = req.cookies?.vpanel_impersonate_admin;
+    const adminToken = req.cookies?.nuvyra_impersonate_admin;
     if (!adminToken) {
       return res.redirect('/dashboard');
     }
     const adminPayload = authService.verifyToken(adminToken);
     if (!adminPayload || !adminPayload.sub) {
-      res.clearCookie('vpanel_impersonate_admin');
+      res.clearCookie('nuvyra_impersonate_admin');
       return res.redirect('/login');
     }
     const adminUser = await authService.findById(Number(adminPayload.sub));
     if (!adminUser || (adminUser.role !== 'admin' && !adminUser.root_admin)) {
-      res.clearCookie('vpanel_impersonate_admin');
+      res.clearCookie('nuvyra_impersonate_admin');
       return res.redirect('/login');
     }
 
     res.cookie('token', adminToken, { httpOnly: true, sameSite: 'lax', maxAge: 86400000 });
-    res.clearCookie('vpanel_impersonate_admin');
+    res.clearCookie('nuvyra_impersonate_admin');
 
     await activity.logActivity({
       user_id: adminUser.id,

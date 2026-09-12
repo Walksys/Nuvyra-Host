@@ -1,7 +1,7 @@
 module.exports = {
   apps: [
     {
-      name: 'vpanel',
+      name: 'nuvyra',
       script: 'src/server.js',
       cwd: __dirname,
       instances: 1,

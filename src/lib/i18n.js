@@ -1,5 +1,5 @@
 /**
- * vPanel Pro v3 - Internationalization (i18n) Engine
+ * Nuvyra v3 - Internationalization (i18n) Engine
  */
 
 const LOCALES = {
@@ -149,7 +149,7 @@ function translate(key, locale = 'en') {
 }
 
 function i18nMiddleware(req, res, next) {
-  let lang = req.cookies?.vpanel_lang || 'en';
+  let lang = req.cookies?.nuvyra_lang || 'en';
   if (!LOCALES[lang]) lang = 'en';
 
   res.locals.__ = (key) => translate(key, lang);

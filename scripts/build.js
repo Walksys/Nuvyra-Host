@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * vpanel build script
+ * nuvyra build script
  * - ensures all required directories exist
  * - validates configuration
  * - checks system dependencies (qemu etc.) and prints a report
@@ -28,7 +28,7 @@ function hasBin(b) {
 
 (async () => {
 console.log('');
-console.log('  vpanel build');
+console.log('  nuvyra build');
 console.log('  =================');
 console.log('');
 
@@ -84,7 +84,7 @@ if (!fs.existsSync(path.join(novncDir, 'rfb.js'))) {
 }
 
 // 5. jwt secret
-if (config.jwtSecret === 'vpanel-insecure-secret-change-me') {
+if (config.jwtSecret === 'nuvyra-insecure-secret-change-me') {
   warnings.push('JWT_SECRET is still the default. Set a strong value in .env before production.');
 }
 

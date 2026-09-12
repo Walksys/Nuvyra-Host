@@ -370,7 +370,7 @@
         <div class="flex-between mb-3">
           <div>
             <div class="muted text-sm">Selected Database</div>
-            <h3 style="font-size:18px;font-weight:800;color:#10b981;margin:0" id="selectedDbTitle">vpanel</h3>
+            <h3 style="font-size:18px;font-weight:800;color:#10b981;margin:0" id="selectedDbTitle">nuvyra</h3>
             <div class="muted text-sm mono" id="selectedDbStats" style="font-size:11px;margin-top:2px">Size: - | Collections: - | Objects: -</div>
           </div>
           <div class="flex" style="gap:8px">
@@ -911,10 +911,10 @@
 const state = {
   currentTab: 'overview',
   databases: [],
-  selectedDb: 'vpanel',
+  selectedDb: 'nuvyra',
   selectedColl: '',
   browser: {
-    db: 'vpanel',
+    db: 'nuvyra',
     coll: '',
     filter: '',
     page: 1,
@@ -1073,8 +1073,8 @@ function populateAllDbSelects() {
     sel.innerHTML = state.databases.map(d => `<option value="${escapeHtml(d.name)}">${escapeHtml(d.name)}</option>`).join('');
     if (current && state.databases.some(d => d.name === current)) {
       sel.value = current;
-    } else if (state.databases.some(d => d.name === 'vpanel')) {
-      sel.value = 'vpanel';
+    } else if (state.databases.some(d => d.name === 'nuvyra')) {
+      sel.value = 'nuvyra';
     }
   });
 }
@@ -1224,7 +1224,7 @@ async function promptDropCurrentDb() {
 
     if (res.ok) {
       showToast(`Database '${dbName}' dropped`);
-      state.selectedDb = 'vpanel';
+      state.selectedDb = 'nuvyra';
       loadDatabasesAndCollections();
     } else {
       showToast(res.error || 'Failed to drop database', 'error');
@@ -1552,7 +1552,7 @@ function fillSampleInsertDoc() {
   const sample = {
     title: "New Record",
     status: "active",
-    tags: ["vpanel", "mongodb"],
+    tags: ["nuvyra", "mongodb"],
     metadata: {
       created_by: "admin",
       priority: 1

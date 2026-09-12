@@ -43,11 +43,11 @@ async function getNextId(name) {
 }
 
 const defaultSettings = {
-  'panel.name': 'vpanel',
+  'panel.name': 'nuvyra',
   'panel.logo_mode': 'url',
   'panel.logo_url': '',
   'panel.logo_file': '',
-  'panel.favicon_name': 'vpanel',
+  'panel.favicon_name': 'nuvyra',
   'panel.favicon_mode': 'url',
   'panel.favicon_url': '',
   'panel.favicon_file': '',
@@ -86,7 +86,7 @@ const defaultSettings = {
   'update.auto_check': '1',
   'update.backup_before': '1',
   'update.auto_pm2_restart': '1',
-  'update.repo': 'nobita329/vpanel-pro',
+  'update.repo': 'nobita329/nuvyra-pro',
   'update.last_checked': '',
   'update.latest_version': '',
   'update.available': '0',
@@ -166,7 +166,7 @@ const S = {
 async function initDb() {
   if (dbInstance) return { db: dbInstance, collections, settings: S, getNextId };
   await client.connect();
-  dbInstance = client.db('vpanel');
+  dbInstance = client.db('nuvyra');
 
   const names = [
     'users', 'vms', 'subusers', 'backups', 'schedules',

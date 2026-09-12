@@ -1,6 +1,6 @@
 <div align="center">
 
-# ⚡ vPanel Pro v3.1.1
+# ⚡ Nuvyra v3.1.1
 ### Enterprise-Grade QEMU/KVM Virtualization & Server Management Platform
 
 [![Node.js](https://img.shields.io/badge/Node.js-v18+-339933?style=for-the-badge&logo=nodedotjs&logoColor=white)](https://nodejs.org)
@@ -15,7 +15,7 @@
 
 </div>
 
-## 🌟 What's New in vPanel Pro v3.1.1
+## 🌟 What's New in Nuvyra v3.1.1
 
 - 🛠️ **Cross-Platform Installer Suite (`install.sh`)**: Automated installation with auto-resolution of `docker-proxy` for Ubuntu 24.04 (Noble), Debian 11–13, Docker CE, and devcontainers. Includes unattended CLI flags (`--admin-user`, `--admin-pass`, `--no-pm2`, `-y`).
 - 🖥️ **Default Terminal Size (169×33)**: SSH console defaults to 169 columns × 33 rows with quick-reset toolbar actions and geometry persistence.
@@ -75,7 +75,7 @@
 
 ```text
 ┌─────────────────────────────────────────────────────────────┐
-│                       vPanel Pro UI                         │
+│                       Nuvyra UI                         │
 │   (Glassmorphism CSS • EJS Templates • Socket.IO • Xterm)   │
 └──────────────────────────────┬──────────────────────────────┘
                                │ HTTP / WebSocket (Port 3001)
@@ -85,7 +85,7 @@
 └──────────────┬──────────────────────────────┬───────────────┘
                │                              │
 ┌──────────────▼──────────────┐┌──────────────▼───────────────┐
-│     QEMU Hypervisor Engine  ││     vPanel Guest Agent       │
+│     QEMU Hypervisor Engine  ││     Nuvyra Guest Agent       │
 │  (-drive, -smp, -m, -netdev)││  (Python HTTP Daemon / SSH)  │
 └─────────────────────────────┘└──────────────────────────────┘
 ```
@@ -107,14 +107,14 @@
 
 ```bash
 # Clone the repository
-git clone https://github.com/nobita329/vpanel-pro.git
-cd vpanel-pro
+git clone https://github.com/nobita329/nuvyra-pro.git
+cd nuvyra-pro
 
 # Interactive installation menu
 sudo bash install.sh
 
 # Or 1-line unattended install
-sudo bash install.sh --install -y --admin-user admin --admin-email admin@vpanel.local --admin-pass 'your_secure_password'
+sudo bash install.sh --install -y --admin-user admin --admin-email admin@nuvyra.local --admin-pass 'your_secure_password'
 ```
 
 #### Installer CLI Options:
@@ -126,7 +126,7 @@ sudo bash install.sh --install -y --admin-user admin --admin-email admin@vpanel.
 | `4`, `--pm2` | PM2 cluster management menu | - |
 | `5`, `--uninstall` | Safe uninstaller wizard | - |
 | `--admin-user <user>` | Administrator username | `admin` |
-| `--admin-email <email>`| Administrator email address | `admin@vpanel.local` |
+| `--admin-email <email>`| Administrator email address | `admin@nuvyra.local` |
 | `--admin-pass <pass>` | Administrator password | Generated random |
 | `--no-pm2` | Skip PM2 daemon setup | `0` |
 | `-y`, `--non-interactive` | Run without interactive prompts | `0` |
@@ -136,8 +136,8 @@ sudo bash install.sh --install -y --admin-user admin --admin-email admin@vpanel.
 
 ```bash
 # 1. Clone repository and install dependencies
-git clone https://github.com/nobita329/vpanel-pro.git
-cd vpanel-pro
+git clone https://github.com/nobita329/nuvyra-pro.git
+cd nuvyra-pro
 npm install
 
 # 2. Build assets
@@ -146,7 +146,7 @@ npm run build
 # 3. Create administrator account
 npm run createuser
 
-# 4. Start vPanel Pro
+# 4. Start Nuvyra
 npm start
 ```
 
@@ -190,7 +190,7 @@ JWT_EXPIRES=7d
 ALLOW_REGISTER=1
 
 # MongoDB Connection URI
-MONGO_URI=mongodb://admin:password@127.0.0.1:27017/vpanel?authSource=admin
+MONGO_URI=mongodb://admin:password@127.0.0.1:27017/nuvyra?authSource=admin
 
 # Storage Locations
 VM_DIR=./vms

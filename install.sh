@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-#  ⚡ vPanel Pro - Next-Gen QEMU Virtual Machine Management Web Panel
+#  ⚡ Nuvyra - Next-Gen QEMU Virtual Machine Management Web Panel
 #  Full Support Installer for Debian (11, 12, 13) & Ubuntu (20.04, 22.04, 24.04)
 # =============================================================================
 
@@ -17,8 +17,8 @@ BOLD='\033[1m'
 NC='\033[0m'
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-if [ -d "$SCRIPT_DIR/vpanel-pro" ]; then
-  APP_DIR="$SCRIPT_DIR/vpanel-pro"
+if [ -d "$SCRIPT_DIR/nuvyra-pro" ]; then
+  APP_DIR="$SCRIPT_DIR/nuvyra-pro"
 else
   APP_DIR="$SCRIPT_DIR"
 fi
@@ -29,7 +29,7 @@ safe_clear() {
   clear 2>/dev/null || true
 }
 
-log_info()  { printf "${CYAN}${BOLD}[vPanel]${NC} %b\n" "$*"; }
+log_info()  { printf "${CYAN}${BOLD}[Nuvyra]${NC} %b\n" "$*"; }
 log_ok()    { printf "${GREEN}${BOLD}[✔ SUCCESS]${NC} %b\n" "$*"; }
 log_warn()  { printf "${YELLOW}${BOLD}[⚠ WARN]${NC} %b\n" "$*"; }
 log_err()   { printf "${RED}${BOLD}[✖ ERROR]${NC} %b\n" "$*" >&2; }
@@ -69,13 +69,13 @@ get_server_ip() {
 }
 
 # =============================================================================
-# 1. INSTALL VPANEL PRO
+# 1. INSTALL Nuvyra
 # =============================================================================
 do_install() {
   safe_clear
   printf "${CYAN}${BOLD}"
   echo "================================================================="
-  echo "             🚀 Installing vPanel Pro on $OS_NAME                "
+  echo "             🚀 Installing Nuvyra on $OS_NAME                "
   echo "================================================================="
   printf "${NC}\n"
 
@@ -141,7 +141,7 @@ API_PORT=3002
 PANEL_URL=http://localhost:3001
 JWT_SECRET=
 JWT_EXPIRES=7d
-MONGO_URI=mongodb://admin:password@127.0.0.1:27017/vpanel?authSource=admin
+MONGO_URI=mongodb://admin:password@127.0.0.1:27017/nuvyra?authSource=admin
 AUTO_PORT_MIN=25501
 AUTO_PORT_MAX=25600
 AUTO_VNC_PORT_MIN=25901
@@ -175,7 +175,7 @@ EOF
     fi
   fi
 
-  if node -e "require('dotenv').config(); const { MongoClient } = require('mongodb'); const uri = process.env.MONGO_URI || 'mongodb://admin:password@127.0.0.1:27017/vpanel?authSource=admin'; const c = new MongoClient(uri, { serverSelectionTimeoutMS: 2000 }); c.connect().then(() => { c.close(); process.exit(0); }).catch(() => process.exit(1));" >/dev/null 2>&1; then
+  if node -e "require('dotenv').config(); const { MongoClient } = require('mongodb'); const uri = process.env.MONGO_URI || 'mongodb://admin:password@127.0.0.1:27017/nuvyra?authSource=admin'; const c = new MongoClient(uri, { serverSelectionTimeoutMS: 2000 }); c.connect().then(() => { c.close(); process.exit(0); }).catch(() => process.exit(1));" >/dev/null 2>&1; then
     log_ok "MongoDB is already reachable and authenticated."
     mongo_ready=1
   fi
@@ -239,7 +239,7 @@ EOF
     log_info "Waiting for MongoDB to become ready..."
     local attempts=0
     while [ $attempts -lt 30 ]; do
-      if node -e "require('dotenv').config(); const { MongoClient } = require('mongodb'); const uri = process.env.MONGO_URI || 'mongodb://admin:password@127.0.0.1:27017/vpanel?authSource=admin'; const c = new MongoClient(uri, { serverSelectionTimeoutMS: 1500 }); c.connect().then(() => { c.close(); process.exit(0); }).catch(() => process.exit(1));" >/dev/null 2>&1; then
+      if node -e "require('dotenv').config(); const { MongoClient } = require('mongodb'); const uri = process.env.MONGO_URI || 'mongodb://admin:password@127.0.0.1:27017/nuvyra?authSource=admin'; const c = new MongoClient(uri, { serverSelectionTimeoutMS: 1500 }); c.connect().then(() => { c.close(); process.exit(0); }).catch(() => process.exit(1));" >/dev/null 2>&1; then
         mongo_ready=1
         log_ok "MongoDB server is online and ready."
         break
@@ -261,7 +261,7 @@ EOF
   # Step 8: Administrator Account
   log_info "Step 8/8: Creating Administrator Account..."
   local IN_USER="${ADMIN_USER:-admin}"
-  local IN_EMAIL="${ADMIN_EMAIL:-admin@vpanel.local}"
+  local IN_EMAIL="${ADMIN_EMAIL:-admin@nuvyra.local}"
   local IN_PASS="${ADMIN_PASS:-}"
 
   if [ -t 0 ] && [ "$NON_INTERACTIVE" -eq 0 ] && [ -z "$ADMIN_PASS" ]; then
@@ -318,9 +318,9 @@ EOF
       npm install -g pm2 --no-audit --no-fund
     fi
 
-    log_info "Starting vPanel Pro cluster with PM2..."
-    pm2 delete vpanel >/dev/null 2>&1 || true
-    pm2 start ecosystem.config.js || pm2 start src/server.js --name vpanel
+    log_info "Starting Nuvyra cluster with PM2..."
+    pm2 delete nuvyra >/dev/null 2>&1 || true
+    pm2 start ecosystem.config.js || pm2 start src/server.js --name nuvyra
     pm2 save
     pm2 startup systemd -u root --hp /root >/dev/null 2>&1 || true
   else
@@ -333,7 +333,7 @@ EOF
   echo ""
   printf "${GREEN}${BOLD}"
   echo "================================================================="
-  echo "           🎉 vPanel Pro Successfully Installed & Online!        "
+  echo "           🎉 Nuvyra Successfully Installed & Online!        "
   echo "================================================================="
   printf "${NC}\n"
   echo "  🌐 Web Panel URL:    http://${s_ip}:3001"
@@ -343,7 +343,7 @@ EOF
   echo "  📧 Admin Email:      ${IN_EMAIL}"
   echo ""
   if [ "$USE_PM2" -eq 1 ]; then
-    echo "  ⚙️  PM2 Process:      pm2 status | pm2 logs vpanel"
+    echo "  ⚙️  PM2 Process:      pm2 status | pm2 logs nuvyra"
   else
     echo "  ⚙️  Run Server:      npm start"
   fi
@@ -373,7 +373,7 @@ do_create_user() {
     read -r -p "Enter Username [default: ${A_USER}]: " INPUT_USER
     A_USER="${INPUT_USER:-$A_USER}"
 
-    local DEF_EMAIL="${A_USER}@vpanel.local"
+    local DEF_EMAIL="${A_USER}@nuvyra.local"
     read -r -p "Enter Email [default: ${A_EMAIL:-$DEF_EMAIL}]: " INPUT_EMAIL
     A_EMAIL="${INPUT_EMAIL:-${A_EMAIL:-$DEF_EMAIL}}"
 
@@ -390,7 +390,7 @@ do_create_user() {
   fi
 
   if [ -z "$A_EMAIL" ]; then
-    A_EMAIL="${A_USER}@vpanel.local"
+    A_EMAIL="${A_USER}@nuvyra.local"
   fi
 
   if [ -z "$A_PASS" ]; then
@@ -436,13 +436,13 @@ do_create_user() {
 }
 
 # =============================================================================
-# 3. UPDATE VPANEL PRO
+# 3. UPDATE Nuvyra
 # =============================================================================
 do_update() {
   safe_clear
   printf "${CYAN}${BOLD}"
   echo "================================================================="
-  echo "                   🔄 Updating vPanel Pro                        "
+  echo "                   🔄 Updating Nuvyra                        "
   echo "================================================================="
   printf "${NC}\n"
 
@@ -467,7 +467,7 @@ do_update() {
     pm2 save
   fi
 
-  log_ok "vPanel Pro has been updated successfully!"
+  log_ok "Nuvyra has been updated successfully!"
   echo ""
 }
 
@@ -484,10 +484,10 @@ do_pm2_menu() {
     echo "================================================================="
     printf "${NC}\n"
     echo "  [1] 📊 View Status (pm2 status)"
-    echo "  [2] 🔄 Restart vPanel (pm2 restart vpanel)"
-    echo "  [3] ⏹️  Stop vPanel (pm2 stop vpanel)"
-    echo "  [4] ▶️  Start vPanel (pm2 start vpanel)"
-    echo "  [5] 📜 View Live Logs (pm2 logs vpanel)"
+    echo "  [2] 🔄 Restart Nuvyra (pm2 restart nuvyra)"
+    echo "  [3] ⏹️  Stop Nuvyra (pm2 stop nuvyra)"
+    echo "  [4] ▶️  Start Nuvyra (pm2 start nuvyra)"
+    echo "  [5] 📜 View Live Logs (pm2 logs nuvyra)"
     echo "  [6] ⚡ Enable Auto-start on System Boot"
     echo "  [7] 🚫 Disable Auto-start on System Boot"
     echo "  [0] 🔙 Back to Main Menu"
@@ -502,26 +502,26 @@ do_pm2_menu() {
         read -r -p "Press Enter to continue..." _
         ;;
       2)
-        log_info "Restarting vPanel cluster..."
+        log_info "Restarting Nuvyra cluster..."
         pm2 restart all
-        log_ok "vPanel restarted."
+        log_ok "Nuvyra restarted."
         read -r -p "Press Enter to continue..." _
         ;;
       3)
-        log_info "Stopping vPanel cluster..."
+        log_info "Stopping Nuvyra cluster..."
         pm2 stop all
-        log_ok "vPanel stopped."
+        log_ok "Nuvyra stopped."
         read -r -p "Press Enter to continue..." _
         ;;
       4)
-        log_info "Starting vPanel cluster..."
+        log_info "Starting Nuvyra cluster..."
         pm2 start ecosystem.config.js || pm2 start all
-        log_ok "vPanel started."
+        log_ok "Nuvyra started."
         read -r -p "Press Enter to continue..." _
         ;;
       5)
         log_info "Streaming live PM2 logs (Ctrl+C to exit)..."
-        pm2 logs vpanel --lines 50
+        pm2 logs nuvyra --lines 50
         ;;
       6)
         log_info "Configuring PM2 startup systemd service..."
@@ -548,18 +548,18 @@ do_pm2_menu() {
 }
 
 # =============================================================================
-# 5. UNINSTALL VPANEL PRO
+# 5. UNINSTALL Nuvyra
 # =============================================================================
 do_uninstall() {
   safe_clear
   printf "${RED}${BOLD}"
   echo "================================================================="
-  echo "                 🗑️  Uninstall vPanel Pro                        "
+  echo "                 🗑️  Uninstall Nuvyra                        "
   echo "================================================================="
   printf "${NC}\n"
 
   if [ "$NON_INTERACTIVE" -eq 0 ]; then
-    read -r -p "Are you sure you want to completely uninstall vPanel Pro? (y/N): " CONFIRM
+    read -r -p "Are you sure you want to completely uninstall Nuvyra? (y/N): " CONFIRM
     if [[ "$CONFIRM" != "y" && "$CONFIRM" != "Y" ]]; then
       log_info "Uninstall aborted."
       return
@@ -573,7 +573,7 @@ do_uninstall() {
 
   log_info "Stopping and removing PM2 daemon process..."
   if command -v pm2 >/dev/null 2>&1; then
-    pm2 delete vpanel >/dev/null 2>&1 || true
+    pm2 delete nuvyra >/dev/null 2>&1 || true
     pm2 save >/dev/null 2>&1 || true
     pm2 unstartup systemd >/dev/null 2>&1 || true
   fi
@@ -593,7 +593,7 @@ do_uninstall() {
     log_info "Preserving database and VM disks."
   fi
 
-  log_ok "vPanel Pro has been uninstalled successfully."
+  log_ok "Nuvyra has been uninstalled successfully."
   echo ""
 }
 
@@ -605,7 +605,7 @@ show_menu() {
     safe_clear
     printf "${CYAN}${BOLD}"
     echo "================================================================="
-    echo "                   ⚡ vPanel Pro Management Suite                "
+    echo "                   ⚡ Nuvyra Management Suite                "
     echo "            Full Support: Debian 11/12/13 & Ubuntu 20/22/24      "
     echo "================================================================="
     printf "${NC}"
@@ -641,7 +641,7 @@ show_menu() {
         read -r -p "Press Enter to return to menu..." _
         ;;
       0)
-        log_info "Exiting vPanel Pro Installer. Goodbye!"
+        log_info "Exiting Nuvyra Installer. Goodbye!"
         exit 0
         ;;
       *)
@@ -718,11 +718,11 @@ while [ $# -gt 0 ]; do
       echo "  2, createuser, --create-admin   Create or reset admin account"
       echo "  3, update, --update             Pull updates and rebuild"
       echo "  4, pm2, --pm2                   PM2 cluster management menu"
-      echo "  5, uninstall, --uninstall       Uninstall vPanel Pro"
+      echo "  5, uninstall, --uninstall       Uninstall Nuvyra"
       echo ""
       echo "Options:"
       echo "  --admin-user <user>             Admin username (default: admin)"
-      echo "  --admin-email <email>           Admin email (default: admin@vpanel.local)"
+      echo "  --admin-email <email>           Admin email (default: admin@nuvyra.local)"
       echo "  --admin-pass <pass>             Admin password (default: random secure)"
       echo "  --no-pm2                        Skip PM2 process manager"
       echo "  -y, --non-interactive           Run without interactive prompts"

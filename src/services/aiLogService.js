@@ -152,7 +152,7 @@ class AiLogService {
         ],
         terminal_commands: [
           'df -h',
-          'du -sh /var/lib/vpanel/vms/*',
+          'du -sh /var/lib/nuvyra/vms/*',
         ],
         provider: 'offline-rule-engine',
       };

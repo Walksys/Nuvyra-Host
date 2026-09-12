@@ -140,7 +140,7 @@
         <div class="form-group mb-4">
           <label style="font-size:14px;font-weight:700;color:#fff">1. Panel Name</label>
           <div class="muted text-sm mb-2">Set the admin panel name displayed across navigation, page titles, and alerts.</div>
-          <input name="panel.name" id="panelNameInput" value="<%= all['panel.name'] || 'vpanel' %>" placeholder="vPanel Pro" oninput="updatePanelNamePreview(this.value)" style="max-width:500px"/>
+          <input name="panel.name" id="panelNameInput" value="<%= all['panel.name'] || 'nuvyra' %>" placeholder="Nuvyra" oninput="updatePanelNamePreview(this.value)" style="max-width:500px"/>
         </div>
 
         <hr class="hr" style="margin:24px 0"/>
@@ -191,7 +191,7 @@
                 <% if (logoP) { %>
                   <img id="liveLogoImg" src="<%= logoP %>" style="max-height:48px;max-width:100%;object-fit:contain"/>
                 <% } else { %>
-                  <span id="liveLogoFallback" style="font-size:18px;font-weight:800;letter-spacing:-0.5px;color:var(--text)"><%= all['panel.name'] || 'vpanel' %></span>
+                  <span id="liveLogoFallback" style="font-size:18px;font-weight:800;letter-spacing:-0.5px;color:var(--text)"><%= all['panel.name'] || 'nuvyra' %></span>
                 <% } %>
               </div>
             </div>
@@ -348,7 +348,7 @@
           
           <div id="inspectorCard" class="card" style="padding:20px;border:1px solid var(--accent);background:var(--bg-card);box-shadow:0 8px 30px rgba(0,0,0,0.5)">
             <div class="flex-between mb-2">
-              <span class="font-bold" style="font-size:15px">vPanel Pro System</span>
+              <span class="font-bold" style="font-size:15px">Nuvyra System</span>
               <span class="pill pill-green">Online &amp; Active</span>
             </div>
             <p class="muted text-sm mb-3">This card live-renders your glassmorphism blur and transparency in real-time as you adjust sliders.</p>
@@ -553,7 +553,7 @@
           <div class="form-group"><label>Default OS</label><input name="vm.default_os" value="<%= all['vm.default_os'] || 'Ubuntu 24.04' %>"/></div>
           <div class="form-group"></div>
         </div>
-        <div class="form-hint mb-2">VNC ports feed the graphical noVNC console; agent ports feed the File Manager (vPanel agent installed in the VM).</div>
+        <div class="form-hint mb-2">VNC ports feed the graphical noVNC console; agent ports feed the File Manager (Nuvyra agent installed in the VM).</div>
         <div class="form-row-3">
           <div class="form-group"><label>Default Memory (MB)</label><input name="vm.default_memory" value="<%= all['vm.default_memory'] || '2048' %>"/></div>
           <div class="form-group"><label>Default CPUs</label><input name="vm.default_cpus" value="<%= all['vm.default_cpus'] || '2' %>"/></div>
@@ -1007,7 +1007,7 @@ function toggleFaviconMode(mode) {
 
 function updatePanelNamePreview(val) {
   const fallback = document.getElementById('liveLogoFallback');
-  if (fallback) fallback.textContent = val.trim() || 'vpanel';
+  if (fallback) fallback.textContent = val.trim() || 'nuvyra';
 }
 
 function updateLogoPreview(url) {
@@ -1016,7 +1016,7 @@ function updateLogoPreview(url) {
   if (url && url.trim()) {
     box.innerHTML = `<img id="liveLogoImg" src="${url.trim()}" style="max-height:48px;max-width:100%;object-fit:contain" onerror="this.style.display='none'"/>`;
   } else {
-    const name = (document.getElementById('panelNameInput') ? document.getElementById('panelNameInput').value : 'vpanel');
+    const name = (document.getElementById('panelNameInput') ? document.getElementById('panelNameInput').value : 'nuvyra');
     box.innerHTML = `<span id="liveLogoFallback" style="font-size:18px;font-weight:800;letter-spacing:-0.5px;color:var(--text)">${name}</span>`;
   }
 }

@@ -108,7 +108,7 @@ window.VP = (() => {
 
 (function () {
   const m = /(?:^|;\s*)theme=([^;]+)/.exec(document.cookie);
-  const local = localStorage.getItem('vpanel_theme');
+  const local = localStorage.getItem('nuvyra_theme');
   const t = (m ? m[1] : null) || local || 'dark';
   document.documentElement.setAttribute('data-theme', t);
 })();

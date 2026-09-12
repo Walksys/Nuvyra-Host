@@ -105,7 +105,7 @@ class MongoManagerService {
       uptimeFormatted: formatUptime(serverStatus.uptime || 0),
       storageEngine: serverStatus.storageEngine?.name || 'wiredTiger',
       uri: maskMongoUri(config.mongoUri),
-      activeDatabase: 'vpanel',
+      activeDatabase: 'nuvyra',
     };
   }
 
@@ -199,7 +199,7 @@ class MongoManagerService {
     await db.collection(cleanColl).insertOne({
       _init: true,
       created_at: new Date().toISOString(),
-      system_note: 'Database initialized by vPanel Pro Studio',
+      system_note: 'Database initialized by Nuvyra Studio',
     });
     return { ok: true, database: cleanDbName, collection: cleanColl };
   }
@@ -217,7 +217,7 @@ class MongoManagerService {
 
   async getDatabaseStats(dbName) {
     await ensureConnected();
-    const target = String(dbName || 'vpanel').trim();
+    const target = String(dbName || 'nuvyra').trim();
     const stats = await client.db(target).stats();
     return {
       ...stats,
@@ -227,7 +227,7 @@ class MongoManagerService {
     };
   }
 
-  async listCollections(dbName = 'vpanel') {
+  async listCollections(dbName = 'nuvyra') {
     await ensureConnected();
     const db = client.db(dbName);
     const colls = await db.listCollections().toArray();
@@ -272,7 +272,7 @@ class MongoManagerService {
     return list;
   }
 
-  async createCollection(dbName = 'vpanel', collectionName, options = {}) {
+  async createCollection(dbName = 'nuvyra', collectionName, options = {}) {
     await ensureConnected();
     const name = String(collectionName || '').trim().replace(/[^a-zA-Z0-9_-]/g, '');
     if (!name) throw new Error('Invalid collection name');
@@ -288,7 +288,7 @@ class MongoManagerService {
     return { ok: true, collection: name };
   }
 
-  async dropCollection(dbName = 'vpanel', collectionName) {
+  async dropCollection(dbName = 'nuvyra', collectionName) {
     await ensureConnected();
     const name = String(collectionName || '').trim();
     if (!name) throw new Error('Collection name required');
@@ -296,7 +296,7 @@ class MongoManagerService {
     return { ok: result };
   }
 
-  async truncateCollection(dbName = 'vpanel', collectionName) {
+  async truncateCollection(dbName = 'nuvyra', collectionName) {
     await ensureConnected();
     const name = String(collectionName || '').trim();
     if (!name) throw new Error('Collection name required');
@@ -304,7 +304,7 @@ class MongoManagerService {
     return { ok: true, deletedCount: result.deletedCount };
   }
 
-  async getDocuments(dbName = 'vpanel', collectionName, { filter = {}, sort = { _id: -1 }, page = 1, limit = 20 } = {}) {
+  async getDocuments(dbName = 'nuvyra', collectionName, { filter = {}, sort = { _id: -1 }, page = 1, limit = 20 } = {}) {
     await ensureConnected();
     const coll = client.db(dbName).collection(collectionName);
 
@@ -364,7 +364,7 @@ class MongoManagerService {
     };
   }
 
-  async getDocumentById(dbName = 'vpanel', collectionName, docId) {
+  async getDocumentById(dbName = 'nuvyra', collectionName, docId) {
     await ensureConnected();
     const coll = client.db(dbName).collection(collectionName);
     const parsed = parseId(docId);
@@ -374,7 +374,7 @@ class MongoManagerService {
     return doc;
   }
 
-  async insertDocument(dbName = 'vpanel', collectionName, docData) {
+  async insertDocument(dbName = 'nuvyra', collectionName, docData) {
     await ensureConnected();
     const coll = client.db(dbName).collection(collectionName);
     let doc = typeof docData === 'string' ? parseExtendedJson(docData) : docData;
@@ -390,7 +390,7 @@ class MongoManagerService {
     return { ok: true, insertedId: result.insertedId, doc };
   }
 
-  async updateDocument(dbName = 'vpanel', collectionName, docId, updatedDocData) {
+  async updateDocument(dbName = 'nuvyra', collectionName, docId, updatedDocData) {
     await ensureConnected();
     const coll = client.db(dbName).collection(collectionName);
     let updateObj = typeof updatedDocData === 'string' ? parseExtendedJson(updatedDocData) : updatedDocData;
@@ -413,7 +413,7 @@ class MongoManagerService {
     return { ok: true, modifiedCount: res.modifiedCount, matchedCount: res.matchedCount };
   }
 
-  async deleteDocument(dbName = 'vpanel', collectionName, docId) {
+  async deleteDocument(dbName = 'nuvyra', collectionName, docId) {
     await ensureConnected();
     const coll = client.db(dbName).collection(collectionName);
     const parsed = parseId(docId);
@@ -423,14 +423,14 @@ class MongoManagerService {
     return { ok: true, deletedCount: res.deletedCount };
   }
 
-  async listIndexes(dbName = 'vpanel', collectionName) {
+  async listIndexes(dbName = 'nuvyra', collectionName) {
     await ensureConnected();
     const coll = client.db(dbName).collection(collectionName);
     const indexes = await coll.indexes();
     return indexes;
   }
 
-  async createIndex(dbName = 'vpanel', collectionName, keys, options = {}) {
+  async createIndex(dbName = 'nuvyra', collectionName, keys, options = {}) {
     await ensureConnected();
     const coll = client.db(dbName).collection(collectionName);
     let parsedKeys = typeof keys === 'string' ? JSON.parse(keys) : keys;
@@ -438,7 +438,7 @@ class MongoManagerService {
     return { ok: true, indexName: name };
   }
 
-  async dropIndex(dbName = 'vpanel', collectionName, indexName) {
+  async dropIndex(dbName = 'nuvyra', collectionName, indexName) {
     await ensureConnected();
     if (indexName === '_id_') throw new Error('Cannot drop the default _id index');
     const coll = client.db(dbName).collection(collectionName);
@@ -446,7 +446,7 @@ class MongoManagerService {
     return { ok: true, result: res };
   }
 
-  async runQuery(dbName = 'vpanel', collectionName, queryType = 'find', payload = {}) {
+  async runQuery(dbName = 'nuvyra', collectionName, queryType = 'find', payload = {}) {
     await ensureConnected();
     const startTime = process.hrtime.bigint();
     const coll = client.db(dbName).collection(collectionName);
@@ -522,7 +522,7 @@ class MongoManagerService {
     };
   }
 
-  async exportCollection(dbName = 'vpanel', collectionName) {
+  async exportCollection(dbName = 'nuvyra', collectionName) {
     await ensureConnected();
     ensureBackupDir();
     const coll = client.db(dbName).collection(collectionName);
@@ -556,7 +556,7 @@ class MongoManagerService {
         const fullPath = path.join(BACKUP_DIR, f);
         const stat = fs.statSync(fullPath);
         const parts = f.replace('.json', '').split('_');
-        const dbName = parts[0] || 'vpanel';
+        const dbName = parts[0] || 'nuvyra';
         const collName = parts[1] || 'collection';
 
         backups.push({
@@ -577,7 +577,7 @@ class MongoManagerService {
     return backups;
   }
 
-  async importCollection(dbName = 'vpanel', collectionName, docsArrayOrJsonString, mode = 'append') {
+  async importCollection(dbName = 'nuvyra', collectionName, docsArrayOrJsonString, mode = 'append') {
     await ensureConnected();
     const coll = client.db(dbName).collection(collectionName);
     let docs = typeof docsArrayOrJsonString === 'string'

@@ -87,7 +87,7 @@ router.get('/api/databases/:dbName/stats', async (req, res) => {
 // Collections
 router.get('/api/collections', async (req, res) => {
   try {
-    const collections = await mongoManagerService.listCollections(req.query.db || 'vpanel');
+    const collections = await mongoManagerService.listCollections(req.query.db || 'nuvyra');
     res.json({ ok: true, collections });
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message });
@@ -96,7 +96,7 @@ router.get('/api/collections', async (req, res) => {
 
 router.post('/api/collections/create', json, async (req, res) => {
   try {
-    const result = await mongoManagerService.createCollection(req.body.db || 'vpanel', req.body.name, req.body.options || {});
+    const result = await mongoManagerService.createCollection(req.body.db || 'nuvyra', req.body.name, req.body.options || {});
     await activity.logActivity({ user_id: req.user.id, event: 'mongodb:collection_create', details: { db: req.body.db, collection: req.body.name } });
     res.json(result);
   } catch (e) {
@@ -106,7 +106,7 @@ router.post('/api/collections/create', json, async (req, res) => {
 
 router.post('/api/collections/drop', json, async (req, res) => {
   try {
-    const result = await mongoManagerService.dropCollection(req.body.db || 'vpanel', req.body.name);
+    const result = await mongoManagerService.dropCollection(req.body.db || 'nuvyra', req.body.name);
     await activity.logActivity({ user_id: req.user.id, event: 'mongodb:collection_drop', details: { db: req.body.db, collection: req.body.name } });
     res.json(result);
   } catch (e) {
@@ -116,7 +116,7 @@ router.post('/api/collections/drop', json, async (req, res) => {
 
 router.post('/api/collections/truncate', json, async (req, res) => {
   try {
-    const result = await mongoManagerService.truncateCollection(req.body.db || 'vpanel', req.body.name);
+    const result = await mongoManagerService.truncateCollection(req.body.db || 'nuvyra', req.body.name);
     await activity.logActivity({ user_id: req.user.id, event: 'mongodb:collection_truncate', details: { db: req.body.db, collection: req.body.name } });
     res.json(result);
   } catch (e) {
@@ -127,7 +127,7 @@ router.post('/api/collections/truncate', json, async (req, res) => {
 // Documents
 router.get('/api/documents', async (req, res) => {
   try {
-    const data = await mongoManagerService.getDocuments(req.query.db || 'vpanel', req.query.collection, {
+    const data = await mongoManagerService.getDocuments(req.query.db || 'nuvyra', req.query.collection, {
       filter: req.query.filter,
       sort: req.query.sort,
       page: req.query.page,
@@ -141,7 +141,7 @@ router.get('/api/documents', async (req, res) => {
 
 router.get('/api/documents/:id', async (req, res) => {
   try {
-    const document = await mongoManagerService.getDocumentById(req.query.db || 'vpanel', req.query.collection, req.params.id);
+    const document = await mongoManagerService.getDocumentById(req.query.db || 'nuvyra', req.query.collection, req.params.id);
     if (!document) return res.status(404).json({ ok: false, error: 'Document not found' });
     res.json({ ok: true, document });
   } catch (e) {
@@ -151,7 +151,7 @@ router.get('/api/documents/:id', async (req, res) => {
 
 router.post('/api/documents/insert', json, async (req, res) => {
   try {
-    const result = await mongoManagerService.insertDocument(req.body.db || 'vpanel', req.body.collection, req.body.document);
+    const result = await mongoManagerService.insertDocument(req.body.db || 'nuvyra', req.body.collection, req.body.document);
     await activity.logActivity({ user_id: req.user.id, event: 'mongodb:document_insert', details: { db: req.body.db, collection: req.body.collection } });
     res.json(result);
   } catch (e) {
@@ -161,7 +161,7 @@ router.post('/api/documents/insert', json, async (req, res) => {
 
 router.post('/api/documents/update', json, async (req, res) => {
   try {
-    const result = await mongoManagerService.updateDocument(req.body.db || 'vpanel', req.body.collection, req.body.id, req.body.document);
+    const result = await mongoManagerService.updateDocument(req.body.db || 'nuvyra', req.body.collection, req.body.id, req.body.document);
     await activity.logActivity({ user_id: req.user.id, event: 'mongodb:document_update', details: { db: req.body.db, collection: req.body.collection, id: req.body.id } });
     res.json(result);
   } catch (e) {
@@ -171,7 +171,7 @@ router.post('/api/documents/update', json, async (req, res) => {
 
 router.post('/api/documents/delete', json, async (req, res) => {
   try {
-    const result = await mongoManagerService.deleteDocument(req.body.db || 'vpanel', req.body.collection, req.body.id);
+    const result = await mongoManagerService.deleteDocument(req.body.db || 'nuvyra', req.body.collection, req.body.id);
     await activity.logActivity({ user_id: req.user.id, event: 'mongodb:document_delete', details: { db: req.body.db, collection: req.body.collection, id: req.body.id } });
     res.json(result);
   } catch (e) {
@@ -182,7 +182,7 @@ router.post('/api/documents/delete', json, async (req, res) => {
 // Indexes
 router.get('/api/indexes', async (req, res) => {
   try {
-    const indexes = await mongoManagerService.listIndexes(req.query.db || 'vpanel', req.query.collection);
+    const indexes = await mongoManagerService.listIndexes(req.query.db || 'nuvyra', req.query.collection);
     res.json({ ok: true, indexes });
   } catch (e) {
     res.status(500).json({ ok: false, error: e.message });
@@ -191,7 +191,7 @@ router.get('/api/indexes', async (req, res) => {
 
 router.post('/api/indexes/create', json, async (req, res) => {
   try {
-    const result = await mongoManagerService.createIndex(req.body.db || 'vpanel', req.body.collection, req.body.keys, req.body.options || {});
+    const result = await mongoManagerService.createIndex(req.body.db || 'nuvyra', req.body.collection, req.body.keys, req.body.options || {});
     await activity.logActivity({ user_id: req.user.id, event: 'mongodb:index_create', details: { db: req.body.db, collection: req.body.collection } });
     res.json(result);
   } catch (e) {
@@ -201,7 +201,7 @@ router.post('/api/indexes/create', json, async (req, res) => {
 
 router.post('/api/indexes/drop', json, async (req, res) => {
   try {
-    const result = await mongoManagerService.dropIndex(req.body.db || 'vpanel', req.body.collection, req.body.name);
+    const result = await mongoManagerService.dropIndex(req.body.db || 'nuvyra', req.body.collection, req.body.name);
     await activity.logActivity({ user_id: req.user.id, event: 'mongodb:index_drop', details: { db: req.body.db, collection: req.body.collection, index: req.body.name } });
     res.json(result);
   } catch (e) {
@@ -212,7 +212,7 @@ router.post('/api/indexes/drop', json, async (req, res) => {
 // Query Console
 router.post('/api/query', json, async (req, res) => {
   try {
-    const { db = 'vpanel', collection, type = 'find', payload = {} } = req.body;
+    const { db = 'nuvyra', collection, type = 'find', payload = {} } = req.body;
     if (!collection) return res.status(400).json({ ok: false, error: 'Collection is required' });
     const response = await mongoManagerService.runQuery(db, collection, type, payload);
     res.json(response);
@@ -233,7 +233,7 @@ router.get('/api/backups', (req, res) => {
 
 router.post('/api/backups/export', json, async (req, res) => {
   try {
-    const result = await mongoManagerService.exportCollection(req.body.db || 'vpanel', req.body.collection);
+    const result = await mongoManagerService.exportCollection(req.body.db || 'nuvyra', req.body.collection);
     await activity.logActivity({ user_id: req.user.id, event: 'mongodb:backup_export', details: { db: req.body.db, collection: req.body.collection } });
     res.json(result);
   } catch (e) {
@@ -243,7 +243,7 @@ router.post('/api/backups/export', json, async (req, res) => {
 
 router.post('/api/backups/import', uploadBackup.single('file'), async (req, res) => {
   try {
-    const dbName = req.body.db || 'vpanel';
+    const dbName = req.body.db || 'nuvyra';
     const collection = req.body.collection;
     const mode = req.body.mode || 'append';
 

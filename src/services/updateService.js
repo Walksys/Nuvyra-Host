@@ -60,7 +60,7 @@ class UpdateService extends EventEmitter {
     }
 
     const currentVersion = this.getCurrentVersion();
-    const repo = settings.get('update.repo') || 'nobita329/vpanel-pro';
+    const repo = settings.get('update.repo') || 'nobita329/nuvyra-pro';
     const channel = settings.get('update.channel') || 'stable';
     const ignoredVer = settings.get('update.ignored_version') || '';
 
@@ -68,7 +68,7 @@ class UpdateService extends EventEmitter {
       const apiUrl = `https://api.github.com/repos/${repo}/releases`;
       const res = await fetch(apiUrl, {
         headers: {
-          'User-Agent': 'vPanel-Pro-Updater/3.0.0',
+          'User-Agent': 'Nuvyra-Updater/3.0.0',
           Accept: 'application/vnd.github.v3+json',
         },
         signal: AbortSignal.timeout(8000),
@@ -207,7 +207,7 @@ class UpdateService extends EventEmitter {
     };
 
     try {
-      log(`🚀 Initiating vPanel Pro system update: ${fromVersion} -> ${targetVersion}`);
+      log(`🚀 Initiating Nuvyra system update: ${fromVersion} -> ${targetVersion}`);
 
       // STEP 1: Preflight Environment Check
       emitStep(1, 'Checking Update & Environment...', 15);
@@ -275,7 +275,7 @@ class UpdateService extends EventEmitter {
       const autoReload = settings.get('update.auto_pm2_restart') !== '0';
       if (autoReload) {
         try {
-          execSync('pm2 restart vpanel || pm2 reload vpanel || true', { stdio: 'pipe', timeout: 15000 });
+          execSync('pm2 restart nuvyra || pm2 reload nuvyra || true', { stdio: 'pipe', timeout: 15000 });
           log('✔ Application cluster restarted.');
         } catch (_) {
           log('PM2 reload command executed.');
@@ -284,7 +284,7 @@ class UpdateService extends EventEmitter {
 
       // Complete!
       emitStep(7, 'Update Completed Successfully! 🎉', 100);
-      log(`🎉 vPanel Pro successfully updated to ${targetVersion}!`);
+      log(`🎉 Nuvyra successfully updated to ${targetVersion}!`);
 
       // Record in History
       const histId = await getNextId('update_history');
@@ -352,7 +352,7 @@ class UpdateService extends EventEmitter {
     }
 
     try {
-      execSync('pm2 restart vpanel || true', { stdio: 'pipe' });
+      execSync('pm2 restart nuvyra || true', { stdio: 'pipe' });
     } catch (_) {}
 
     await collections.update_history.updateOne(

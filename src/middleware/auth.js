@@ -33,9 +33,9 @@ async function getUserFromReq(req) {
     } catch (_) {}
   }
 
-  if (user && req.cookies && req.cookies.vpanel_impersonate_admin) {
+  if (user && req.cookies && req.cookies.nuvyra_impersonate_admin) {
     try {
-      const adminToken = String(req.cookies.vpanel_impersonate_admin).trim();
+      const adminToken = String(req.cookies.nuvyra_impersonate_admin).trim();
       const adminPayload = authService.verifyToken(adminToken);
       if (adminPayload && adminPayload.sub) {
         const adminUser = await authService.findById(Number(adminPayload.sub));

@@ -29,7 +29,7 @@ class AuditService {
       username: l.username || 'unknown',
       success: Boolean(l.success !== false),
       method: l.method || 'Password + JWT',
-      user_agent: l.user_agent || 'Mozilla/5.0 (vPanel Client)',
+      user_agent: l.user_agent || 'Mozilla/5.0 (Nuvyra Client)',
       timestamp: l.timestamp || new Date().toISOString(),
       formattedTime: new Date(l.timestamp || Date.now()).toLocaleString(),
     }));
