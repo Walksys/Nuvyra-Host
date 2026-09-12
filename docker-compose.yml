@@ -17,7 +17,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: nuvyra-pro
+    container_name: nuvyra
     restart: unless-stopped
     depends_on:
       - mongodb

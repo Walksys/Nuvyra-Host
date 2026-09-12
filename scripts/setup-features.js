@@ -55,7 +55,7 @@ const auth = require('../src/services/authService');
   console.log('=== MANUAL STEPS REQUIRED FOR FULL FEATURE SET ===')
   console.log('1. Add SSH Terminal/Novnc/Live Boot Logs tabs to the console UI')
   console.log('2. Modify SSH Terminal to support multi-sessions (+/-) and 24/7 connection')
-  console.log('3. Add the template from https://github.com/nobita329/Template.git to the template library')
+  console.log('3. Add the template from https://github.com/Walksys/Template.git to the template library')
   console.log('4. Implement VM live status display in the console')
   console.log('')
   console.log('Note: The above manual steps require code changes to the panel source.')

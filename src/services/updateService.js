@@ -60,7 +60,7 @@ class UpdateService extends EventEmitter {
     }
 
     const currentVersion = this.getCurrentVersion();
-    const repo = settings.get('update.repo') || 'nobita329/nuvyra-pro';
+    const repo = settings.get('update.repo') || 'Walksys/nuvyra';
     const channel = settings.get('update.channel') || 'stable';
     const ignoredVer = settings.get('update.ignored_version') || '';
 

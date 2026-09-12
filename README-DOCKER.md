@@ -28,7 +28,7 @@ docker build -t nuvyra-nokvm .
 
 # Run container in No-KVM Mode (no /dev/kvm required)
 docker run -d \
-  --name nuvyra-pro \
+  --name nuvyra \
   --restart unless-stopped \
   -e NO_KVM=1 \
   -p 3001:3001 \

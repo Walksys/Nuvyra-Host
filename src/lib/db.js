@@ -86,7 +86,7 @@ const defaultSettings = {
   'update.auto_check': '1',
   'update.backup_before': '1',
   'update.auto_pm2_restart': '1',
-  'update.repo': 'nobita329/nuvyra-pro',
+  'update.repo': 'Walksys/nuvyra',
   'update.last_checked': '',
   'update.latest_version': '',
   'update.available': '0',
@@ -122,7 +122,7 @@ const defaultSettings = {
     ['AlmaLinux 9', 'almalinux', '9', 'https://repo.almalinux.org/almalinux/9/cloud/x86_64/images/AlmaLinux-9-GenericCloud-latest.x86_64.qcow2', 'almalinux', 'root'],
     ['Rocky Linux 9', 'rockylinux', '9', 'https://download.rockylinux.org/pub/rocky/9/images/x86_64/Rocky-9-GenericCloud.latest.x86_64.qcow2', 'rocky', 'root']
   ]),
-  'vm.template_repo': 'https://github.com/nobita329/Template.git',
+  'vm.template_repo': 'https://github.com/Walksys/Template.git',
   'user.default_cpu_cores': '8',
   'user.default_ram_mb': '8192',
   'user.default_disk_gb': '100',

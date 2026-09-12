@@ -1,5 +1,5 @@
 {
-  "name": "nuvyra-pro",
+  "name": "nuvyra",
   "version": "3.1.1",
   "description": "Nuvyra v3 - Enterprise Virtualization Platform & Management Suite",
   "main": "src/server.js",

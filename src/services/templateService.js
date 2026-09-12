@@ -6,7 +6,7 @@ const config = require("../lib/config");
 const logger = require("../lib/logger");
 const { collections, settings, ensureConnected, getNextId } = require("../lib/db");
 
-const DEFAULT_REPO_URL = "https://github.com/nobita329/Template.git";
+const DEFAULT_REPO_URL = "https://github.com/Walksys/Template.git";
 const TEMPLATE_DIR = path.join(config.root, "storage/templates");
 const REPO_DIR = path.join(TEMPLATE_DIR, "repo");
 

@@ -17,8 +17,8 @@ BOLD='\033[1m'
 NC='\033[0m'
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-if [ -d "$SCRIPT_DIR/nuvyra-pro" ]; then
-  APP_DIR="$SCRIPT_DIR/nuvyra-pro"
+if [ -d "$SCRIPT_DIR/nuvyra" ]; then
+  APP_DIR="$SCRIPT_DIR/nuvyra"
 else
   APP_DIR="$SCRIPT_DIR"
 fi

@@ -21,7 +21,7 @@
 - 🖥️ **Default Terminal Size (169×33)**: SSH console defaults to 169 columns × 33 rows with quick-reset toolbar actions and geometry persistence.
 - ⚡ **Multi-Session SSH with 24/7 Persistence**: Run and toggle concurrent SSH terminal tabs without losing connection state when navigating between console tabs.
 - 🖱️ **noVNC Graphical Desktop Console**: Low-latency HTML5 remote framebuffer console for QEMU guests via WebSocket proxy (`/vncws/:id`) with Ctrl+Alt+Del dispatcher.
-- 💿 **OS Templates Studio**: 1-click cloud-init synchronization for 16 templates from [nobita329/Template.git](https://github.com/nobita329/Template.git) (Ubuntu, Debian, Fedora, CentOS, AlmaLinux, Rocky Linux).
+- 💿 **OS Templates Studio**: 1-click cloud-init synchronization for 16 templates from [Walksys/Template.git](https://github.com/Walksys/Template.git) (Ubuntu, Debian, Fedora, CentOS, AlmaLinux, Rocky Linux).
 - 👑 **Clean 2-Panel Architecture**: Strict UI segregation between the Administrative Control Plane (`/admin/*`) and the Tenant Server Management Panel (`/dashboard`).
 - 🗄️ **MongoDB Management Studio**: Integrated Mongo-Express style manager for databases, collections, documents, indexes, and raw MongoDB query console.
 - 💾 **Storage Pools & ISO Library**: Manage Local Directory, LVM Volume Groups, and NFS storage pools, plus 1-click cloud image downloads.
@@ -107,8 +107,8 @@
 
 ```bash
 # Clone the repository
-git clone https://github.com/nobita329/nuvyra-pro.git
-cd nuvyra-pro
+git clone https://github.com/Walksys/nuvyra.git
+cd nuvyra
 
 # Interactive installation menu
 sudo bash install.sh
@@ -136,8 +136,8 @@ sudo bash install.sh --install -y --admin-user admin --admin-email admin@nuvyra.
 
 ```bash
 # 1. Clone repository and install dependencies
-git clone https://github.com/nobita329/nuvyra-pro.git
-cd nuvyra-pro
+git clone https://github.com/Walksys/nuvyra.git
+cd nuvyra
 npm install
 
 # 2. Build assets
@@ -227,5 +227,5 @@ AUTO_AGENT_PORT_MAX=26200
 Distributed under the MIT License. See `LICENSE` for more information.
 
 <div align="center">
-  <sub>Built with ❤️ by <a href="https://github.com/nobita329">Nobita</a> for developers and sysadmins worldwide.</sub>
+  <sub>Built with ❤️ by <a href="https://github.com/Walksys">Nobita</a> for developers and sysadmins worldwide.</sub>
 </div>
