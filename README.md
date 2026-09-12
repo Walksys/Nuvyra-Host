@@ -227,5 +227,5 @@ AUTO_AGENT_PORT_MAX=26200
 Distributed under the MIT License. See `LICENSE` for more information.
 
 <div align="center">
-  <sub>Built with ❤️ by <a href="https://github.com/Walksys">Nobita</a> for developers and sysadmins worldwide.</sub>
+  <sub>Built with ❤️ by <a href="https://github.com/Walksys">Walksys</a> for developers and sysadmins worldwide.</sub>
 </div>
